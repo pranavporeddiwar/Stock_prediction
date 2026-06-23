@@ -8,6 +8,7 @@ from app.services.ai_agent import get_hybrid_prediction
 import asyncio
 from app.services.chat_agent import get_tutor_response
 from datetime import datetime
+
 # ==========================================
 # 🔥 FIREBASE CLOUD DATABASE SETUP
 # ==========================================
@@ -19,6 +20,7 @@ db = None  # Global database instance
 def init_firebase():
     global db
     try:
+        # Check if Firebase is already initialized
         get_app()
         print("🔥 Firebase already initialized.")
         db = firestore.client()
@@ -26,6 +28,7 @@ def init_firebase():
     except ValueError:
         pass 
 
+    # Dynamic Path Routing
     render_path = "/etc/secrets/serviceAccountKey.json"
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     local_path = os.path.join(base_dir, "serviceAccountKey.json")
@@ -82,15 +85,15 @@ async def startup_event():
     print("✅ All Neural Services Online!")
 
 # ==========================================
-# 🩺 CLOUD HEALTH CHECK (Prevents Render Shutdowns)
+# 🩺 CLOUD HEALTH CHECK (The Heartbeat)
 # ==========================================
 @app.get("/")
 async def root_health_check():
     return {
         "status": "online",
-        "message": "Neural Stream AI Engine is live! 🚀",
+        "message": "Neural Stream AI Engine is permanently live! 🚀",
         "firebase": "Connected",
-        "broker": "Active"
+        "port": 10000
     }
 
 # ==========================================
