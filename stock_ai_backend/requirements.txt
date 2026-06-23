@@ -2,9 +2,10 @@ fastapi
 uvicorn
 websockets
 tensorflow-cpu==2.20.0
+tf-keras
 pandas
 numpy
-scikit-learn
+scikit-learn==1.8.0
 joblib
 smartapi-python
 pyotp

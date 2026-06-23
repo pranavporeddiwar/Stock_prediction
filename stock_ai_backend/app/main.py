@@ -1,3 +1,7 @@
+import os
+# 🚨 CRITICAL AI FIX: Force TensorFlow to use the legacy Keras bridge to prevent the 'quantization_config' crash
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
 from fastapi import FastAPI, Query, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.data_fetcher import DataFetcher
@@ -5,7 +9,6 @@ from app.services.prediction_service import PredictionService
 from app.services.watchlist_service import WatchlistService
 from app.services.ai_agent import get_hybrid_prediction
 import asyncio
-import os
 from app.services.chat_agent import get_tutor_response
 from datetime import datetime
 
@@ -20,23 +23,18 @@ db = None  # Global database instance
 def init_firebase():
     global db
     try:
-        # Check if Firebase is already initialized to prevent double-init cloud crashes
         get_app()
         print("🔥 Firebase already initialized.")
         db = firestore.client()
         return
     except ValueError:
-        pass # App doesn't exist yet, proceed with fresh initialization
+        pass 
 
-    # 1. Cloud Vault Path (Render's highly secure Linux environment)
     render_path = "/etc/secrets/serviceAccountKey.json"
-    
-    # 2. Local Laptop Path (Checks the root directory of your project)
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     local_path = os.path.join(base_dir, "serviceAccountKey.json")
 
     try:
-        # Dynamic Path Routing
         if os.path.exists(render_path):
             print("☁️ SYSTEM: Loading Firebase from Render Secrets Vault...")
             cred = credentials.Certificate(render_path)
@@ -46,11 +44,11 @@ def init_firebase():
         elif os.path.exists("serviceAccountKey.json"):
             print("💻 SYSTEM: Loading Firebase from relative local path...")
             cred = credentials.Certificate("serviceAccountKey.json")
-        elif os.path.exists("firebase-key.json"): # Fallback for your original naming
+        elif os.path.exists("firebase-key.json"): 
             print("💻 SYSTEM: Loading Firebase from legacy firebase-key.json...")
             cred = credentials.Certificate("firebase-key.json")
         else:
-            print("❌ CRITICAL: Firebase Secret Key not found in local OR cloud vault!")
+            print("❌ CRITICAL: Firebase Secret Key not found!")
             return 
 
         firebase_admin.initialize_app(cred)
@@ -59,7 +57,6 @@ def init_firebase():
     except Exception as e:
         print(f"⚠️ Firebase Init Error: {e}")
 
-# Execute Firebase routing before launching the API
 init_firebase()
 
 
@@ -75,7 +72,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global instances
 data_fetcher = None
 prediction_engine = None
 watchlist_manager = None
@@ -83,7 +79,6 @@ watchlist_manager = None
 @app.on_event("startup")
 async def startup_event():
     global data_fetcher, prediction_engine, watchlist_manager
-    
     print("⚙️ Initializing AI & Broker Services...")
     data_fetcher = DataFetcher()
     prediction_engine = PredictionService()
@@ -91,7 +86,19 @@ async def startup_event():
     print("✅ All Neural Services Online!")
 
 # ==========================================
-# 🌐 STANDARD HTTP ENDPOINTS (Initial Load)
+# 🩺 CLOUD HEALTH CHECK (Prevents Render Shutdowns)
+# ==========================================
+@app.get("/")
+async def root_health_check():
+    return {
+        "status": "online",
+        "message": "Neural Stream AI Engine is live! 🚀",
+        "firebase": "Connected",
+        "broker": "Active"
+    }
+
+# ==========================================
+# 🌐 STANDARD HTTP ENDPOINTS 
 # ==========================================
 @app.get("/predict")
 async def get_prediction(symbol: str = Query(..., description="NSE Stock Symbol")):
@@ -99,7 +106,6 @@ async def get_prediction(symbol: str = Query(..., description="NSE Stock Symbol"
     
     try:
         df = await asyncio.to_thread(data_fetcher.get_enriched_data, symbol, mode="intraday")
-        
         if df is None or df.empty:
             raise HTTPException(status_code=404, detail="Failed to fetch market data.")
 
@@ -128,7 +134,6 @@ async def get_prediction(symbol: str = Query(..., description="NSE Stock Symbol"
                 print(f"❌ Firebase Upload Error: {fb_err}")
 
         return final_response
-
     except Exception as e:
         print(f"❌ API Error for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -139,7 +144,6 @@ async def get_watchlist():
     try:
         return await watchlist_manager.get_market_overview()
     except Exception as e:
-        print(f"❌ API Watchlist Route Exception: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat")
@@ -153,29 +157,19 @@ async def chat_endpoint(payload: dict):
          raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# ⚡ WEBSOCKET LIVE STREAM (Real-Time Ticks)
+# ⚡ WEBSOCKET LIVE STREAM 
 # ==========================================
 @app.websocket("/ws/live/{symbol}")
 async def live_stock_stream(websocket: WebSocket, symbol: str):
-    """
-    Maintains an open connection with Flutter.
-    Pushes live Angel One ticks and fresh LSTM predictions every 5 seconds.
-    """
     await websocket.accept()
     print(f"🟢 [WebSocket OPEN] Live Stream activated for {symbol.upper()}")
-    
     try:
         while True:
-            # 1. Fetch live tick data quietly in a background thread
             df = await asyncio.to_thread(data_fetcher.get_enriched_data, symbol, mode="intraday")
-            
             if df is not None and not df.empty:
                 current_price = float(df['close'].iloc[-1])
-                
-                # 2. Pure Math Inference (Lightning Fast, NO LLM)
                 lstm_future = prediction_engine.generate_forecast(df)
                 
-                # 3. Build the Live Payload
                 live_payload = {
                     "symbol": symbol.upper(),
                     "current_price": current_price,
@@ -183,14 +177,8 @@ async def live_stock_stream(websocket: WebSocket, symbol: str):
                     "future_path": lstm_future,
                     "timestamp": datetime.now().isoformat()
                 }
-                
-                # 4. Push directly to Flutter's open socket
                 await websocket.send_json(live_payload)
-                print(f"📡 [WebSocket] Pushed live tick for {symbol.upper()} -> ₹{current_price}")
-            
-            # Pause for 5 seconds to respect CPU and Broker rate limits
             await asyncio.sleep(5)
-            
     except WebSocketDisconnect:
         print(f"🔴 [WebSocket CLOSED] Client disconnected from {symbol.upper()}")
     except Exception as e:
