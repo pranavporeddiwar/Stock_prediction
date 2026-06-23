@@ -12,3 +12,4 @@ groq
 python-dotenv
 firebase-admin
 logzero
+websocket-client
