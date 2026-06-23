@@ -5,6 +5,7 @@ from app.services.prediction_service import PredictionService
 from app.services.watchlist_service import WatchlistService
 from app.services.ai_agent import get_hybrid_prediction
 import asyncio
+import os
 from app.services.chat_agent import get_tutor_response
 from datetime import datetime
 
@@ -12,16 +13,55 @@ from datetime import datetime
 # 🔥 FIREBASE CLOUD DATABASE SETUP
 # ==========================================
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, get_app
 
-try:
-    cred = credentials.Certificate("firebase-key.json")
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
-    print("✅ Firebase Cloud Database Connected Successfully!")
-except Exception as e:
-    print(f"⚠️ Firebase Init Error: Please check your firebase-key.json file! Details: {e}")
-    db = None
+db = None  # Global database instance
+
+def init_firebase():
+    global db
+    try:
+        # Check if Firebase is already initialized to prevent double-init cloud crashes
+        get_app()
+        print("🔥 Firebase already initialized.")
+        db = firestore.client()
+        return
+    except ValueError:
+        pass # App doesn't exist yet, proceed with fresh initialization
+
+    # 1. Cloud Vault Path (Render's highly secure Linux environment)
+    render_path = "/etc/secrets/serviceAccountKey.json"
+    
+    # 2. Local Laptop Path (Checks the root directory of your project)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_path = os.path.join(base_dir, "serviceAccountKey.json")
+
+    try:
+        # Dynamic Path Routing
+        if os.path.exists(render_path):
+            print("☁️ SYSTEM: Loading Firebase from Render Secrets Vault...")
+            cred = credentials.Certificate(render_path)
+        elif os.path.exists(local_path):
+            print("💻 SYSTEM: Loading Firebase from Local Laptop...")
+            cred = credentials.Certificate(local_path)
+        elif os.path.exists("serviceAccountKey.json"):
+            print("💻 SYSTEM: Loading Firebase from relative local path...")
+            cred = credentials.Certificate("serviceAccountKey.json")
+        elif os.path.exists("firebase-key.json"): # Fallback for your original naming
+            print("💻 SYSTEM: Loading Firebase from legacy firebase-key.json...")
+            cred = credentials.Certificate("firebase-key.json")
+        else:
+            print("❌ CRITICAL: Firebase Secret Key not found in local OR cloud vault!")
+            return 
+
+        firebase_admin.initialize_app(cred)
+        db = firestore.client()
+        print("✅ Firebase Cloud Database Connected Successfully!")
+    except Exception as e:
+        print(f"⚠️ Firebase Init Error: {e}")
+
+# Execute Firebase routing before launching the API
+init_firebase()
+
 
 # ==========================================
 # 🚀 FASTAPI INITIALIZATION
