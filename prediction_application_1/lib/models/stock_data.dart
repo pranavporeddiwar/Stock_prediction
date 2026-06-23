@@ -2,11 +2,11 @@ class StockData {
   final String symbol;
   final double currentPrice;
   final List<CandleModel> history;
-  final List<CandleModel> predictedPath; // UPDATED: Full candles for future graph
+  final List<CandleModel> predictedPath; // Full candles for future graph
   final double sentiment;
   final String suitability;
   final String action;     // "BUY", "SELL", or "HOLD"
-  final String reasoning;  // The Trade Thesis from Claude 3 Opus
+  final String reasoning;  // The Trade Thesis from AI
   final double stopLoss;   // Specific SL Price
   final double targetPrice;// Specific TP Price
   final double rsi;
@@ -34,17 +34,13 @@ class StockData {
       return (val as num).toDouble();
     }
 
-    // Parse Nested Risk Object if your backend still uses it, 
-    // otherwise these can be mapped directly from the top level.
-    var risk = json['dynamic_risk'] ?? {};
-
     return StockData(
       symbol: json['symbol']?.toString() ?? 'N/A',
       currentPrice: forceDouble(json['current_price']),
       sentiment: forceDouble(json['sentiment']),
       suitability: json['suitability']?.toString() ?? 'ANALYZING...',
       
-      // Mapped from Claude 3 Opus response keys
+      // Mapped from AI response keys
       action: json['action']?.toString() ?? 'HOLD',
       reasoning: json['reasoning']?.toString() ?? 'Analyzing market momentum...',
       
@@ -75,6 +71,7 @@ class CandleModel {
   final double high;
   final double low;
   final double close;
+  final double volume;
 
   CandleModel({
     required this.time,
@@ -82,6 +79,7 @@ class CandleModel {
     required this.high,
     required this.low,
     required this.close,
+    required this.volume,
   });
 
   factory CandleModel.fromJson(Map<String, dynamic> json) {
@@ -92,6 +90,7 @@ class CandleModel {
       high: (json['high'] as num? ?? 0.0).toDouble(),
       low: (json['low'] as num? ?? 0.0).toDouble(),
       close: (json['close'] as num? ?? 0.0).toDouble(),
+      volume: (json['volume'] as num? ?? 0.0).toDouble(), // 👈 FIX: Volume is now safely parsed!
     );
   }
 }

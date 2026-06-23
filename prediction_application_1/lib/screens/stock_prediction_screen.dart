@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../services/api_service.dart';
+import '../services/live_stream_service.dart';
 import '../models/stock_data.dart';
 import 'investment_helper_page.dart';
-import '../utils/app_state.dart'; // NEW: Import the global context state
+import '../utils/app_state.dart'; 
+import '../widgets/bottom_nav_bar.dart';
+import '../widgets/global_chat_bot.dart'; // REQUIRED to trigger the slider overlay
 
 class StockPredictionScreen extends StatefulWidget {
   final String symbol;
@@ -16,9 +19,12 @@ class StockPredictionScreen extends StatefulWidget {
 class _StockPredictionScreenState extends State<StockPredictionScreen> {
   StockData? data;
   bool isLoading = true;
+  
+  final LiveStreamService _streamService = LiveStreamService();
+  
   late TrackballBehavior _trackballBehavior;
   late SelectionBehavior _selectionBehavior;
-  late ZoomPanBehavior _zoomPanBehavior; // Ensures the graph isn't squashed
+  late ZoomPanBehavior _zoomPanBehavior; 
 
   @override
   void initState() {
@@ -47,7 +53,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       unselectedOpacity: 0.4,
     );
 
-    // Initialization for TradingView-style zooming and panning
     _zoomPanBehavior = ZoomPanBehavior(
       enablePinching: true,
       enablePanning: true,
@@ -56,31 +61,21 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     );
 
     super.initState();
-    _fetchData();
+    _startLiveStream();
   }
 
-  Future<void> _fetchData() async {
+  void _startLiveStream() async {
     if (!mounted) return;
     setState(() => isLoading = true);
     
+    // 1. Initial HTTP Fetch (Gets the initial Llama-3 AI Reasoning for UI)
     try {
-      final result = await ApiService().fetchPrediction(widget.symbol, "intraday");
+      final initialData = await ApiService().fetchPrediction(widget.symbol, "intraday");
       if (mounted) {
         setState(() {
-          data = result;
+          data = initialData;
           isLoading = false;
         });
-        
-        // --- NEW: UPDATE THE BOT'S BRAIN ---
-        // Feeds the exact screen numbers into the background context for the Neural Tutor
-        if (data != null && data!.history.isNotEmpty) {
-          currentBotContext.value = 
-            "User is viewing the prediction screen for ${widget.symbol}. "
-            "Current Price: ₹${data!.history.last.close}. "
-            "AI Signal: ${data!.action}. "
-            "RSI: ${data!.rsi.toStringAsFixed(1)}. "
-            "AI Reasoning: ${data!.reasoning}";
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -89,7 +84,50 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
           SnackBar(backgroundColor: Colors.redAccent, content: Text("Neural Sync Error: $e")),
         );
       }
+      return; 
     }
+
+    // 2. Open continuous WebSocket for Live Ticks
+    _streamService.connectToLiveStream(widget.symbol).listen((liveData) {
+      if (mounted && data != null) {
+        setState(() {
+          data = StockData(
+            symbol: data!.symbol,
+            currentPrice: liveData.currentPrice,
+            history: liveData.history,
+            predictedPath: liveData.predictedPath,
+            sentiment: data!.sentiment,
+            suitability: data!.suitability,
+            action: data!.action,
+            reasoning: data!.reasoning, // Keep static text for UI display
+            stopLoss: data!.stopLoss,
+            targetPrice: data!.targetPrice,
+            rsi: liveData.rsi,
+            trendLogic: liveData.trendLogic,
+          );
+        });
+        
+        // ⚡ THE UPGRADE: Pass the raw mathematical parameters straight into the AI's short-term memory
+        final String currentDateTime = DateTime.now().toString().split('.')[0];
+        
+        currentBotContext.value = 
+          "STOCK SYMBOL: ${widget.symbol.toUpperCase()}\n"
+          "CURRENT TIMESTAMP: $currentDateTime\n"
+          "LIVE TICK PRICE: ₹${liveData.currentPrice}\n"
+          "CURRENT RSI VALUE: ${liveData.rsi.toStringAsFixed(2)}\n"
+          "INITIAL AI SIGNAL: ${data!.action}\n"
+          "LSTM FUTURE PATH FORECAST (Next 25 Steps of 15-min candles):\n"
+          "${liveData.predictedPath.map((candle) => 'Close: ₹${candle.close}').toList()}";
+      }
+    }, onError: (error) {
+      debugPrint("WebSocket Stream Interrupted: $error");
+    });
+  }
+
+  @override
+  void dispose() {
+    _streamService.disconnect();
+    super.dispose();
   }
 
   @override
@@ -98,6 +136,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
+      extendBody: true, 
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
@@ -120,6 +159,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
           : !hasData 
               ? _buildNoDataUI()
               : SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 100), 
                   child: Column(
                     children: [
                       _buildAdvancedTradingChart(),
@@ -129,13 +169,44 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                     ],
                   ),
                 ),
+      
+      // 🤖 The Purple AI Assistant Button
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF9D4EDD).withOpacity(0.4),
+              blurRadius: 16,
+              spreadRadius: 2,
+            )
+          ],
+        ),
+        child: FloatingActionButton(
+          backgroundColor: const Color(0xFF7B2CBF),
+          shape: const CircleBorder(),
+          onPressed: () {
+            // SLIDE UP THE NEURAL TUTOR!
+            GlobalChatBot.show(context);
+          },
+          child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
+        ),
+      ),
+      
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: 0, 
+        onTap: (index) {
+          Navigator.pop(context);
+        },
+      ),
     );
   }
 
   Widget _buildAdvancedTradingChart() {
     final int historyCount = data!.history.length;
     
-    // Auto-focus on the last 60 candles so they look like real candlesticks
     final double initialVisibleMin = historyCount > 60 
         ? (historyCount - 60).toDouble() 
         : 0.0;
@@ -157,7 +228,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         
         primaryYAxis: const NumericAxis(
           opposedPosition: true, 
-          anchorRangeToVisiblePoints: true, // Crucial: Fixes the 'squashed to zero' bug
+          anchorRangeToVisiblePoints: true, 
           labelPosition: ChartDataLabelPosition.outside,
           labelStyle: TextStyle(color: Colors.white60, fontSize: 10),
           axisLine: AxisLine(width: 0),
@@ -165,7 +236,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         ),
         
         series: <CartesianSeries>[
-          // 1. HISTORICAL DATA
           CandleSeries<CandleModel, int>(
             dataSource: data!.history,
             xValueMapper: (c, i) => i,
@@ -178,7 +248,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             enableSolidCandles: true,
             selectionBehavior: _selectionBehavior,
           ),
-          // 2. FUTURE PREDICTED PATH
           CandleSeries<CandleModel, int>(
             dataSource: data!.predictedPath,
             xValueMapper: (c, i) => historyCount + i,
@@ -195,7 +264,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         ],
         
         annotations: <CartesianChartAnnotation>[
-          // 1. ENTRY POINT (Buy/Sell Arrow)
           if (data!.action != "HOLD")
             CartesianChartAnnotation(
               widget: Column(
@@ -220,7 +288,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
               y: data!.history.last.low,
             ),
           
-          // 2. TARGET POINT (Flag)
           if (data!.predictedPath.isNotEmpty)
             CartesianChartAnnotation(
               widget: const Column(
@@ -355,7 +422,10 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
           const Icon(Icons.query_stats, color: Colors.white10, size: 60),
           const SizedBox(height: 20),
           const Text("OFFLINE", style: TextStyle(color: Colors.white24, letterSpacing: 2)),
-          TextButton(onPressed: _fetchData, child: const Text("RECONNECT", style: TextStyle(color: Color(0xFF00FFA3)))),
+          TextButton(
+            onPressed: _startLiveStream, 
+            child: const Text("RECONNECT", style: TextStyle(color: Color(0xFF00FFA3)))
+          ),
         ],
       ),
     );

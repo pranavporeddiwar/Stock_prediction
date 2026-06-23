@@ -1,7 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-// This holds the background context for the AI.
-// It can be accessed and updated from anywhere in the app.
-final ValueNotifier<String> currentBotContext = ValueNotifier<String>(
-  "User is looking at the main Watchlist."
-);
+// This reactive variable acts as the "eyes" for the Llama-3 AI.
+// It updates silently in the background whenever the user opens a stock chart or live stream.
+final ValueNotifier<String> currentBotContext = ValueNotifier<String>("User is viewing the general market watchlist.");

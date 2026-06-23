@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../widgets/bottom_nav_bar.dart';
 import 'watchlist_screen.dart';
-import 'history_screen.dart'; // Ensure this is created
+import 'home_screen.dart'; // Target search screen layout
+import 'journal_screen.dart'; // Target portfolio data layers
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
@@ -12,54 +14,58 @@ class MainWrapper extends StatefulWidget {
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
 
-  // The core screens of your Neural Stream app
-  final List<Widget> _screens = [
+  final List<Widget> _pages = [
     const WatchlistScreen(),
-    const Center(child: Text("AI Scanner - Coming Soon", style: TextStyle(color: Colors.white24))),
-    const HistoryScreen(), // Replaced Wallet with History
-    const Center(child: Text("Profile - Coming Soon", style: TextStyle(color: Colors.white24))),
+    const HomeScreen(),
+    const JournalScreen(),
+    const Center(child: Text("User Profile Data", style: TextStyle(color: Colors.white))),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
+      extendBody: true, // Crucial: Extends the canvas area cleanly beneath the curved bar boundaries
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: _pages,
       ),
-      bottomNavigationBar: Container(
+
+      // THE CENTRAL GLOWING ACTION BUTTON (As seen in image_6cf2c1.png)
+      floatingActionButton: Container(
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05), width: 0.5)),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.black,
-          selectedItemColor: const Color(0xFF00FFA3),
-          unselectedItemColor: Colors.white24,
-          selectedFontSize: 10,
-          unselectedFontSize: 10,
-          showUnselectedLabels: true,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view_rounded, size: 20),
-              label: 'Watchlist',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.analytics_outlined, size: 20),
-              label: 'Scanner',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history_toggle_off_rounded, size: 20), // History Icon
-              label: 'History',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_2_outlined, size: 20),
-              label: 'Profile',
-            ),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF9D4EDD).withOpacity(0.4), // Premium electric glow border
+              blurRadius: 16,
+              spreadRadius: 2,
+            )
           ],
         ),
+        child: FloatingActionButton(
+          backgroundColor: const Color(0xFF7B2CBF), // Pure electric neon purple fill
+          shape: const CircleBorder(),
+          onPressed: () {
+            // Option A: Trigger your Neural Tutor overlay window
+            // Option B: Push straight to an Assistant specific view state
+            print("Neural Assistant Activated");
+          },
+          child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
+        ),
+      ),
+
+      // Center mount positioning rules
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
+      // Mount your updated curved custom panel
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
       ),
     );
   }

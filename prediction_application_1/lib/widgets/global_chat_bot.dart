@@ -1,177 +1,180 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../utils/app_state.dart'; // Imports the context state
+import '../services/api_service.dart';
+import '../utils/app_state.dart';
 
 class GlobalChatBot extends StatefulWidget {
-  final Widget child;
-  const GlobalChatBot({super.key, required this.child});
+  const GlobalChatBot({super.key});
+
+  /// A helper function to easily slide this chat interface up from anywhere in the app!
+  static void show(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const GlobalChatBot(),
+    );
+  }
 
   @override
   State<GlobalChatBot> createState() => _GlobalChatBotState();
 }
 
 class _GlobalChatBotState extends State<GlobalChatBot> {
-  bool _isOpen = false;
   final TextEditingController _controller = TextEditingController();
-  final List<Map<String, String>> _messages = [
-    {"role": "bot", "text": "Hi! I'm Neural Tutor. Need help understanding the AI signals or a trading term?"}
-  ];
+  final List<Map<String, String>> _messages = [];
   bool _isTyping = false;
 
-  // IMPORTANT: Make sure this is your laptop's current IPv4 address!
-  final String baseUrl = "http://192.168.1.78:8000";
+  @override
+  void initState() {
+    super.initState();
+    // The bot introduces itself dynamically based on the current reactive context!
+    String topic = currentBotContext.value.contains("prediction screen for")
+        ? currentBotContext.value.split("prediction screen for ")[1].split(".")[0]
+        : "the broader market";
+        
+    _messages.add({
+      "sender": "bot",
+      "text": "Neural Tutor initialized. I am actively monitoring $topic. How can I assist your trading strategy today?"
+    });
+  }
 
-  Future<void> _sendMessage() async {
+  void _sendMessage() async {
     if (_controller.text.trim().isEmpty) return;
-
-    String userText = _controller.text.trim();
+    String userMsg = _controller.text.trim();
+    
     setState(() {
-      _messages.add({"role": "user", "text": userText});
-      _controller.clear();
+      _messages.add({"sender": "user", "text": userMsg});
       _isTyping = true;
     });
+    
+    _controller.clear();
 
     try {
-      final response = await http.post(
-        Uri.parse("$baseUrl/chat"),
-        headers: {"Content-Type": "application/json"},
-        // Sends the user's message PLUS the background context
-        body: json.encode({
-          "message": userText,
-          "context": currentBotContext.value 
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+      // ⚡ MAGIC HAPPENS HERE: We send the message AND the live context!
+      String reply = await ApiService().sendChatMessage(userMsg, currentBotContext.value);
+      
+      if (mounted) {
         setState(() {
-          _messages.add({"role": "bot", "text": data["reply"]});
+          _messages.add({"sender": "bot", "text": reply});
+          _isTyping = false;
         });
       }
     } catch (e) {
-      setState(() {
-        _messages.add({"role": "bot", "text": "Network error. Make sure you are connected to the server."});
-      });
-    } finally {
-      setState(() => _isTyping = false);
+      if (mounted) {
+        setState(() {
+          _messages.add({"sender": "bot", "text": "⚠️ Connection error: Unable to reach neural network."});
+          _isTyping = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 1. Wrap everything in a transparent Material widget for root-level overlays
-    return Material(
-      type: MaterialType.transparency, 
-      child: Stack(
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75, // Takes up 75% of the screen
+      decoration: const BoxDecoration(
+        color: Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        border: Border(top: BorderSide(color: Color(0xFF9D4EDD), width: 1.5)),
+      ),
+      child: Column(
         children: [
-          // 2. Main App Background (Watchlist, Prediction Screen, etc.)
-          widget.child,
-
-          // 3. SafeArea ensures the UI doesn't hide under the Motorola bottom nav bar
-          SafeArea(
-            child: Stack(
+          // Drag Handle & Title
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Column(
               children: [
-                // Chat Window Overlay
-                if (_isOpen)
-                  Positioned(
-                    bottom: 80, // Moved higher to stay above the button
-                    right: 20,
-                    left: 20,
-                    child: Container(
-                      height: MediaQuery.of(context).size.height * 0.5, // Responsive height
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF121212),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF00FFA3).withOpacity(0.3)),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)
-                        ],
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
+                const SizedBox(height: 15),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.auto_awesome, color: Color(0xFF9D4EDD), size: 18),
+                    SizedBox(width: 8),
+                    Text("Llama-3 Neural Tutor", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // Chat Bubbles
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              itemCount: _messages.length,
+              itemBuilder: (context, index) {
+                bool isUser = _messages[index]["sender"] == "user";
+                return Align(
+                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12, top: 4),
+                    padding: const EdgeInsets.all(16),
+                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
+                    decoration: BoxDecoration(
+                      color: isUser ? const Color(0xFF7B2CBF) : const Color(0xFF151515),
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(20),
+                        topRight: const Radius.circular(20),
+                        bottomLeft: Radius.circular(isUser ? 20 : 0),
+                        bottomRight: Radius.circular(isUser ? 0 : 20),
                       ),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(15),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF00FFA3),
-                              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text("NEURAL TUTOR", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-                                GestureDetector(onTap: () => setState(() => _isOpen = false), child: const Icon(Icons.close, color: Colors.black, size: 20)),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: ListView.builder(
-                              padding: const EdgeInsets.all(15),
-                              itemCount: _messages.length,
-                              itemBuilder: (context, index) {
-                                bool isBot = _messages[index]["role"] == "bot";
-                                return Align(
-                                  alignment: isBot ? Alignment.centerLeft : Alignment.centerRight,
-                                  child: Container(
-                                    margin: const EdgeInsets.only(bottom: 10),
-                                    padding: const EdgeInsets.all(12),
-                                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.65),
-                                    decoration: BoxDecoration(
-                                      color: isBot ? Colors.white10 : const Color(0xFF00FFA3).withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    child: Text(_messages[index]["text"]!, style: TextStyle(color: isBot ? Colors.white : const Color(0xFF00FFA3), fontSize: 12)),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          if (_isTyping)
-                            const Padding(padding: EdgeInsets.all(8.0), child: Text("Tutor is typing...", style: TextStyle(color: Colors.white54, fontSize: 10))),
-                          Padding(
-                            padding: const EdgeInsets.all(10),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Material( // 4. Required to make TextField tappable in an overlay
-                                    color: Colors.transparent,
-                                    child: TextField(
-                                      controller: _controller,
-                                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                                      decoration: InputDecoration(
-                                        hintText: "Ask about a trading concept...",
-                                        hintStyle: const TextStyle(color: Colors.white38),
-                                        filled: true,
-                                        fillColor: Colors.white10,
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 15),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                CircleAvatar(
-                                  backgroundColor: const Color(0xFF00FFA3),
-                                  child: IconButton(icon: const Icon(Icons.send, color: Colors.black, size: 18), onPressed: _sendMessage),
-                                )
-                              ],
-                            ),
-                          )
-                        ],
-                      ),
+                      border: isUser ? null : Border.all(color: Colors.white10),
+                    ),
+                    child: Text(
+                      _messages[index]["text"]!,
+                      style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
                     ),
                   ),
-
-                // Floating Action Button Overlay
-                Positioned(
-                  bottom: 15, // Anchored safely above the nav bar
-                  right: 20,
-                  child: FloatingActionButton(
-                    backgroundColor: const Color(0xFF00FFA3),
-                    onPressed: () => setState(() => _isOpen = !_isOpen),
-                    child: Icon(_isOpen ? Icons.keyboard_arrow_down : Icons.smart_toy, color: Colors.black),
+                );
+              },
+            ),
+          ),
+          
+          // Typing Indicator
+          if (_isTyping)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text("Neural engine is synthesizing...", style: TextStyle(color: Color(0xFF9D4EDD), fontSize: 12, fontStyle: FontStyle.italic)),
+              ),
+            ),
+            
+          // Input Box
+          Container(
+            padding: EdgeInsets.only(left: 15, right: 15, bottom: MediaQuery.of(context).viewInsets.bottom + 15, top: 10),
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              border: Border(top: BorderSide(color: Colors.white10)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: "Ask about the current chart...",
+                      hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                      filled: true,
+                      fillColor: const Color(0xFF1A1A1A),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    ),
+                    onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _sendMessage,
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: const BoxDecoration(color: Color(0xFF00FFA3), shape: BoxShape.circle),
+                    child: const Icon(Icons.send_rounded, color: Colors.black, size: 20),
+                  ),
+                )
               ],
             ),
           ),
