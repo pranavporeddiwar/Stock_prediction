@@ -1,7 +1,4 @@
 import os
-# 🚨 CRITICAL AI FIX: Force TensorFlow to use the legacy Keras bridge to prevent the 'quantization_config' crash
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
-
 from fastapi import FastAPI, Query, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.data_fetcher import DataFetcher
@@ -11,7 +8,6 @@ from app.services.ai_agent import get_hybrid_prediction
 import asyncio
 from app.services.chat_agent import get_tutor_response
 from datetime import datetime
-
 # ==========================================
 # 🔥 FIREBASE CLOUD DATABASE SETUP
 # ==========================================

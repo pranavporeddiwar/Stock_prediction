@@ -11,10 +11,18 @@ class PredictionService:
         self.window_size = 60
         self.forecast_steps = 25
 
-        # 1. Load Pre-Trained Weights into Memory
+        # 1. Load Pre-Trained Weights into Memory with custom Keras 3 metadata parsing
         if os.path.exists(self.model_path):
             try:
-                self.model = tf.keras.models.load_model(self.model_path)
+                # 🔒 TARGETED CLOUD BYPASS: Catch and strip out the 'quantization_config' metadata
+                # that causes Keras version mismatches between Windows and Linux deployments.
+                custom_objects = {
+                    "Dense": lambda **kwargs: tf.keras.layers.Dense(
+                        **{k: v for k, v in kwargs.items() if k != "quantization_config"}
+                    )
+                }
+                
+                self.model = tf.keras.models.load_model(self.model_path, custom_objects=custom_objects)
                 print(f"🧠 AI Inference Engine: Loaded Long Short-Term Memory Network ({self.model_path})")
             except Exception as e:
                 print(f"❌ AI Inference Engine: Critical Error loading model: {e}")
@@ -38,7 +46,7 @@ class PredictionService:
     def generate_forecast(self, df: pd.DataFrame):
         """
         Processes historical stock ticks into a unified 6-dimensional feature space,
-        applies scaling transformations, and handles the LSTM recurrent matrix loop.
+        apply scaling transformations, and handles the LSTM recurrent matrix loop.
         """
         if self.model is None:
             print("❌ Inference Aborted: Deep Learning Model Weights are not allocated.")
