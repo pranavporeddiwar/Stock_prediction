@@ -2,14 +2,16 @@ import pandas as pd
 import numpy as np
 import os
 import pyotp
-import time  # NEW: Required for the exponential backoff sleep
+import time  # Required for API speed limiting
 from dotenv import load_dotenv
 from SmartApi import SmartConnect
 from datetime import datetime, timedelta
 
-# --- ABSOLUTE PATH LOGIC ---
+# --- ABSOLUTE PATH & SECURITY LOGIC ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "../../"))
+
+# 🔒 Load the hidden environment variables into server RAM
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 class DataFetcher:
@@ -32,12 +34,15 @@ class DataFetcher:
 
     def _init_session(self):
         try:
+            # 🔒 SECURE CREDENTIAL EXTRACTION
             api_key = os.getenv("API_KEY")
             client_id = os.getenv("CLIENT_ID")
             pin = os.getenv("PIN")
             totp_secret = os.getenv("TOTP_SECRET", "").replace(" ", "")
 
+            # Safety check to ensure the .env file is being read correctly
             if not all([api_key, client_id, pin, totp_secret]):
+                print("⚠️ CRITICAL SECURITY FAULT: Missing Angel One credentials in .env file!")
                 return None
 
             api = SmartConnect(api_key=api_key)
@@ -45,9 +50,11 @@ class DataFetcher:
             session = api.generateSession(client_id, pin, totp_code)
             
             if session.get('status'):
-                print("✅ ANGEL ONE SESSION ACTIVE")
+                print("✅ ANGEL ONE SESSION ACTIVE (Secured via .env)")
                 return api
-            return None
+            else:
+                print(f"❌ Angel One Login Rejected: {session.get('message', 'Unknown Error')}")
+                return None
         except Exception as e:
             print(f"❌ DataFetcher: Login Exception: {e}")
             return None
@@ -108,7 +115,9 @@ class DataFetcher:
                 to_time = now.strftime('%Y-%m-%d %H:%M')
                 from_time = (now - timedelta(days=20)).strftime('%Y-%m-%d 09:15')
 
-            # --- THE FIX 1: RETRY LOOP WITH EXPONENTIAL BACKOFF ---
+            # --- UNCONDITIONAL THROTTLING ---
+            time.sleep(0.5) 
+            
             res = None
             for attempt in range(3): # Try up to 3 times
                 try:
@@ -122,13 +131,15 @@ class DataFetcher:
                     break # If successful, break out of the retry loop
                     
                 except Exception as api_err:
-                    if "Access denied" in str(api_err) and attempt < 2:
-                        sleep_time = attempt + 1 # Wait 1s, then 2s
-                        print(f"⏳ Rate Limit hit for {trading_symbol}. Retrying in {sleep_time}s...")
-                        time.sleep(sleep_time)
+                    if "Access denied" in str(api_err) or "JSON" in str(api_err):
+                        if attempt < 2:
+                            sleep_time = attempt + 2 # Wait 2s, then 3s
+                            print(f"⏳ Rate Limit hit for {trading_symbol}. Retrying in {sleep_time}s...")
+                            time.sleep(sleep_time)
+                        else:
+                            raise api_err
                     else:
-                        raise api_err # If it fails 3 times, throw the error
-            # ----------------------------------------------------
+                        raise api_err 
 
             if res and res.get('status') and res.get('data'):
                 df = pd.DataFrame(res['data'], columns=['time', 'open', 'high', 'low', 'close', 'volume'])
@@ -136,33 +147,23 @@ class DataFetcher:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
                 
                 # =========================================================
-                # ⚡ THE FIX 2: ABSOLUTE LIVE PRICE (LTP) INJECTION
-                # This ensures the AI predicts from the current second's price
+                # ⚡ ABSOLUTE LIVE PRICE (LTP) INJECTION
                 # =========================================================
                 try:
+                    time.sleep(0.5) 
                     ltp_res = self.api.ltpData("NSE", trading_symbol, token)
                     if ltp_res and ltp_res.get('status') and ltp_res.get('data'):
                         live_ltp = float(ltp_res['data']['ltp'])
-                        
-                        # Update the most recent candle with the live tick
                         df.at[df.index[-1], 'close'] = live_ltp
-                        
-                        # Dynamically stretch the High/Low if the live price broke out
                         df.at[df.index[-1], 'high'] = max(df.at[df.index[-1], 'high'], live_ltp)
                         df.at[df.index[-1], 'low'] = min(df.at[df.index[-1], 'low'], live_ltp)
-                        
                         print(f"⚡ {trading_symbol} LIVE TICK APPLIED: ₹{live_ltp}")
                 except Exception as ltp_err:
                     print(f"⚠️ Live LTP fetch delayed, using latest closed candle: {ltp_err}")
-                # =========================================================
 
                 # --- PROFESSIONAL INDICATOR LAYER ---
-                # Because we updated the close price above, all these math 
-                # functions now include the exact live second!
                 df['rsi'] = self._calculate_professional_rsi(df['close'])
                 df['atr'] = self._calculate_atr(df)
-                
-                # Signal indicators
                 df['ema_20'] = df['close'].ewm(span=20, adjust=False).mean()
                 df['h_o'] = ((df['high'] - df['close']) / (df['close'] + 0.001)) * 100
                 df['pct_chng'] = df['close'].pct_change() * 100
@@ -174,4 +175,4 @@ class DataFetcher:
             return None
         except Exception as e:
             print(f"❌ Fetcher Error: {e}")
-            return None 
+            return None

@@ -1,0 +1,14 @@
+# 🔒 Security & API Keys
+.env
+serviceAccountKey.json
+*/serviceAccountKey.json
+
+# 🐍 Python Virtual Environments
+venv/
+env/
+__pycache__/
+*.pyc
+
+# 📦 OS Junk Files
+.DS_Store
+Thumbs.db

@@ -1,36 +1,44 @@
+import asyncio
 import time
 from app.services.data_fetcher import DataFetcher
 
 class WatchlistService:
-    def __init__(self):
-        self.fetcher = DataFetcher()
-        # --- CACHING SYSTEM ---
+    def __init__(self, fetcher_instance=None):
+        # Bind the shared Singleton DataFetcher instance to avoid multiple sessions
+        self.fetcher = fetcher_instance if fetcher_instance else DataFetcher()
+        
+        # --- HIGH-PERFORMANCE CACHING SYSTEM ---
         self.cached_data = []
         self.last_update_time = 0
-        self.cache_duration = 60 # Keep data for 60 seconds to prevent API bans
+        self.cache_duration = 60  # Cache duration remains 60 seconds
 
-    def get_market_overview(self):
-        """Fetches the watchlist, respecting Angel One API limits."""
-        
+    async def get_market_overview(self):
+        """
+        Asynchronously fetches the watchlist overview.
+        Utilizes non-blocking async sleep to respect broker rate limits safely.
+        """
         current_time = time.time()
         
-        # 1. Return cached data if it's less than 60 seconds old
+        # 1. Evaluate cache status first to save internal compute and API weight
         if current_time - self.last_update_time < self.cache_duration and self.cached_data:
-            print("⚡ Returning Watchlist from Cache (Saved API Call)")
+            print("⚡ Watchlist Performance Cache: HIT")
             return self.cached_data
 
-        # 2. Your target symbols
+        # 2. Define our asset matrix
         symbols = ["RELIANCE", "TCS", "INFY", "SBIN", "ADANIENT"]
         fresh_data = []
 
-        print("📡 Fetching fresh Watchlist data from Angel One...")
+        print("📡 Watchlist Engine: Initializing asynchronous, non-blocking fetch pipeline...")
+        
         for symbol in symbols:
             try:
-                # --- CRITICAL FIX: THE RATE LIMITER ---
-                # Pauses the loop for 0.4 seconds to stay under 3 requests/sec limit
-                time.sleep(0.4) 
+                # 👇 CRITICAL ARCHITECTURAL FIX: Non-blocking async rate limiter
+                # This yields thread control back to FastAPI's loop while waiting,
+                # allowing other endpoints or chat messages to handle instantly.
+                await asyncio.sleep(0.4) 
                 
-                df = self.fetcher.get_enriched_data(symbol, mode="intraday")
+                # Fetching broker data inside an external worker thread pool cleanly
+                df = await asyncio.to_thread(self.fetcher.get_enriched_data, symbol, mode="intraday")
                 
                 if df is not None and not df.empty:
                     last_close = float(df['close'].iloc[-1])
@@ -46,11 +54,11 @@ class WatchlistService:
                         "status": "BULLISH" if pct_change > 0 else "BEARISH"
                     })
             except Exception as e:
-                print(f"⚠️ Skipping {symbol} due to API rate limit: {e}")
+                print(f"⚠️ Watchlist Matrix Exception for {symbol}: {e}")
 
-        # 3. Save to cache
+        # 3. Commit fresh telemetry states to memory cache
         if fresh_data:
             self.cached_data = fresh_data
             self.last_update_time = current_time
 
-        return self.cached_data
+        return fresh_data

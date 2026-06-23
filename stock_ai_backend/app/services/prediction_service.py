@@ -1,85 +1,138 @@
+import os
+import joblib
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+import tensorflow as tf
 
 class PredictionService:
-    def __init__(self):
-        # We scale data between 0 and 1 for accurate LSTM weight distribution
-        self.scaler = MinMaxScaler(feature_range=(0, 1))
-        self.lookback = 60 # Look at the last 60 candles to predict the next trend
+    def __init__(self, model_path='models/stock_lstm_pro.h5', scaler_path='models/scaler.pkl'):
+        self.model_path = model_path
+        self.scaler_path = scaler_path
+        self.window_size = 60
+        self.forecast_steps = 25
 
-    def build_model(self, input_shape):
-        """Builds a robust, dropout-protected LSTM."""
-        model = Sequential()
-        
-        # Layer 1: 50 Neurons, return sequences for the next LSTM layer
-        model.add(LSTM(units=50, return_sequences=True, input_shape=input_shape))
-        model.add(Dropout(0.2)) # Randomly turns off 20% of neurons to prevent overfitting
-        
-        # Layer 2: 50 Neurons
-        model.add(LSTM(units=50, return_sequences=False))
-        model.add(Dropout(0.2))
-        
-        # Output Layer: Predicts the next scaled numerical value
-        model.add(Dense(units=1))
-        
-        model.compile(optimizer='adam', loss='mean_squared_error')
-        return model
+        # 1. Load Pre-Trained Weights into Memory
+        if os.path.exists(self.model_path):
+            try:
+                self.model = tf.keras.models.load_model(self.model_path)
+                print(f"🧠 AI Inference Engine: Loaded Long Short-Term Memory Network ({self.model_path})")
+            except Exception as e:
+                print(f"❌ AI Inference Engine: Critical Error loading model: {e}")
+                self.model = None
+        else:
+            print(f"⚠️ AI Inference Engine: Target model file not found at {self.model_path}")
+            self.model = None
 
-    def predict(self, df):
+        # 2. Load Master Scaler Parameters
+        if os.path.exists(self.scaler_path):
+            try:
+                self.scaler = joblib.load(self.scaler_path)
+                print(f"📏 AI Inference Engine: Loaded Global Market Scaler Parameters ({self.scaler_path})")
+            except Exception as e:
+                print(f"❌ AI Inference Engine: Error loading scaler configuration: {e}")
+                self.scaler = None
+        else:
+            print(f"⚠️ AI Inference Engine: Scaler file missing at {self.scaler_path}.")
+            self.scaler = None
+
+    def generate_forecast(self, df: pd.DataFrame):
         """
-        Trains a quick lightweight model on the current stock's recent history
-        and predicts the baseline trend.
+        Processes historical stock ticks into a unified 6-dimensional feature space,
+        applies scaling transformations, and handles the LSTM recurrent matrix loop.
         """
+        if self.model is None:
+            print("❌ Inference Aborted: Deep Learning Model Weights are not allocated.")
+            return []
+
+        # Exact case-sensitive sequence matching global model metrics
+        features = ['close', 'h_o', 'pct_chng', 'rsi', 'atr', 'ema_20']
+        
         try:
-            # 1. Feature Selection (Multi-variate is more accurate)
-            # Ensure your data_fetcher provides these columns
-            features = ['close'] 
-            data = df[features].values
+            # Clean dataframe layout mapping to ensure exact string matching
+            df_working = df.copy()
+            df_working.columns = [x.lower() for x in df_working.columns]
+
+            # Structural fallback logic if technical columns are missing or casing dropped
+            if 'rsi' not in df_working.columns and 'rsi' in df:
+                df_working['rsi'] = df['RSI']
+            if 'atr' not in df_working.columns and 'atr' in df:
+                df_working['atr'] = df['ATR']
+            if 'ema_20' not in df_working.columns and 'ema_20' in df:
+                df_working['ema_20'] = df['EMA_20']
+
+            # Extract our targeted feature matrix slice
+            df_slice = df_working[features].astype(float)
             
-            if len(data) < self.lookback + 10:
-                print("⚠️ Not enough data for accurate LSTM sequence. Need at least 70 candles.")
-                # Return a simple moving average as a fallback
-                return [float(df['close'].iloc[-1])] * 5
+            if len(df_slice) < self.window_size:
+                print(f"⚠️ Insufficient data points. Need {self.window_size}, got {len(df_slice)}.")
+                return []
 
-            # 2. Scale the data
-            scaled_data = self.scaler.fit_transform(data)
+            # 3. Transform data using features mapped explicitly to clear Sklearn version warnings
+            if self.scaler is not None:
+                # Build an identical DataFrame layout to retain feature name integrity
+                scaler_df = pd.DataFrame(df_slice.values, columns=['close', 'h_o', 'pct_chng', 'RSI', 'ATR', 'EMA_20'])
+                scaled_matrix = self.scaler.transform(scaler_df.values)
+            else:
+                from sklearn.preprocessing import MinMaxScaler
+                fallback_scaler = MinMaxScaler()
+                scaled_matrix = fallback_scaler.fit_transform(df_slice.values)
 
-            # 3. Create sequences (X) and targets (y)
-            X_train, y_train = [], []
-            for i in range(self.lookback, len(scaled_data)):
-                X_train.append(scaled_data[i-self.lookback:i, 0])
-                y_train.append(scaled_data[i, 0])
+            # Isolate lookback sliding frame memory
+            current_window = scaled_matrix[-self.window_size:].tolist()
+            predicted_sequences = []
+
+            # 4. Asynchronous-safe Recursive Inference Loop (Generates 25 time-steps)
+            for _ in range(self.forecast_steps):
+                # Isolate the exact window frame and structure into a 3D tensor: (Batch, Timesteps, Features)
+                input_tensor = np.array([current_window[-self.window_size:]])
                 
-            X_train, y_train = np.array(X_train), np.array(y_train)
-            X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+                # Run math calculation across the 6 features
+                raw_prediction = self.model.predict(input_tensor, verbose=0)[0][0]
+                
+                # Advance lookback window with target state injection, keeping trailing indicators stable
+                next_step_vector = [
+                    raw_prediction,           # close
+                    0.0,                      # h_o
+                    0.0,                      # pct_chng
+                    current_window[-1][3],    # RSI
+                    current_window[-1][4],    # ATR
+                    current_window[-1][5]     # EMA_20
+                ]
+                
+                current_window.append(next_step_vector)
+                predicted_sequences.append(raw_prediction)
 
-            # 4. Train the model quickly (Epochs kept low for speed during your live demo)
-            model = self.build_model((X_train.shape[1], 1))
-            model.fit(X_train, y_train, epochs=3, batch_size=32, verbose=0)
+            # 5. Inverse Scaler Mapping Translation (Matrix reconstruction back to absolute values)
+            inversion_matrix = np.zeros((len(predicted_sequences), 6))
+            inversion_matrix[:, 0] = predicted_sequences  # Bind scaled sequences onto close index parameter channel
+            
+            if self.scaler is not None:
+                real_world_prices = self.scaler.inverse_transform(inversion_matrix)[:, 0]
+            else:
+                max_p, min_p = df_slice['close'].max(), df_slice['close'].min()
+                real_world_prices = [p * (max_p - min_p) + min_p for p in predicted_sequences]
 
-            # 5. Predict the future trend
-            last_60_days = scaled_data[-self.lookback:]
-            X_test = np.array([last_60_days])
-            X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+            # 6. Parse prices to perfectly structured chronological JSON formats for Syncfusion Charts
+            formatted_future_path = []
+            base_price = float(df_working['close'].iloc[-1])
             
-            predicted_scaled_price = model.predict(X_test, verbose=0)
-            
-            # 6. Inverse scale back to real Rupee values
-            predicted_price = self.scaler.inverse_transform(predicted_scaled_price)
-            
-            # Return the predicted trend (we send the numerical base to Groq)
-            base_prediction = float(predicted_price[0][0])
-            
-            # Create a simple 5-step mathematical slope to pass to Llama-3
-            current_price = float(df['close'].iloc[-1])
-            step = (base_prediction - current_price) / 5
-            lstm_trend = [current_price + (step * i) for i in range(1, 6)]
-            
-            return lstm_trend
+            for index, mapped_price in enumerate(real_world_prices):
+                # Adaptive filter to handle potential anomalous drift variance
+                if abs(mapped_price - base_price) / base_price > 0.12:
+                    mapped_price = base_price * (1.0 + (index * 0.001) if mapped_price > base_price else 1.0 - (index * 0.001))
+                
+                formatted_future_path.append({
+                    "open": round(base_price if index == 0 else real_world_prices[index - 1], 2),
+                    "high": round(max(mapped_price, base_price) * 1.001, 2),
+                    "low": round(min(mapped_price, base_price) * 0.999, 2),
+                    "close": round(mapped_price, 2),
+                    "volume": int(df_working['volume'].iloc[-1]) if 'volume' in df_working.columns else 10000,
+                    "time": None  # Handled dynamically downstream inside ai_agent.py
+                })
+                base_price = mapped_price
 
-        except Exception as e:
-            print(f"❌ LSTM Math Error: {e}")
-            return [float(df['close'].iloc[-1])] * 5
+            return formatted_future_path
+
+        except Exception as err:
+            print(f"❌ Inference matrix processing crash occurred: {err}")
+            return []
