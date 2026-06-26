@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:provider/provider.dart'; // 📦 Injected State Manager
 import 'firebase_options.dart';
 import 'screens/main_wrapper.dart'; 
+import 'services/portfolio_service.dart'; // 📈 Injected Live Portfolio Engine
 
 void main() async {
   // 1. Ensures the native Flutter engine framework is initialized before asynchronous bindings
@@ -17,7 +19,16 @@ void main() async {
     print("⚠️ Firebase Root Init Warning: Check your local google-services configuration. Details: $e");
   }
   
-  runApp(const MyApp());
+  // 3. Mount the Global State Providers before booting the UI layer
+  runApp(
+    MultiProvider(
+      providers: [
+        // This spins up the active memory and socket engine the moment the app boots
+        ChangeNotifierProvider(create: (_) => PortfolioService()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -38,8 +49,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       
-      // 👇 FIXED: Builder section removed to decouple the layout architecture.
-      // Your terminal now boots lightning fast straight into the master screen navigation matrix.
+      // Your terminal boots lightning fast straight into the master screen navigation matrix.
       home: const MainWrapper(), 
     );
   }

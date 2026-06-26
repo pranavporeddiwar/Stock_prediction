@@ -4,8 +4,9 @@ import '../models/stock_data.dart';
 
 class ApiService {
   // Centralized endpoint configuration
-  // The LiveStreamService automatically transforms this 'http' address to 'ws' for the socket pipeline
-  static const String baseUrl = "http://192.168.1.67:8000";
+  // ☁️ Pointed globally to the Render Cloud Engine!
+  // Note: Your LiveStreamService will automatically transform 'https' to 'wss' for secure websockets.
+  static const String baseUrl = "https://stock-prediction-dqo3.onrender.com";
 
   /// Fetches the initial heavy structural data snapshot from the backend.
   Future<StockData> fetchPrediction(String symbol, String mode) async {
