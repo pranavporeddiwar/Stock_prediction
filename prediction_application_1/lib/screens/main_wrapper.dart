@@ -3,6 +3,7 @@ import '../widgets/bottom_nav_bar.dart';
 import 'watchlist_screen.dart';
 import 'home_screen.dart'; 
 import 'portfolio_screen.dart'; // 🔄 Swapped out legacy journal imports cleanly
+import '../widgets/global_chat_bot.dart'; // 👈 Import your existing bot
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
@@ -46,7 +47,8 @@ class _MainWrapperState extends State<MainWrapper> {
           backgroundColor: const Color(0xFF7B2CBF), 
           shape: const CircleBorder(),
           onPressed: () {
-            print("Neural Assistant Activated");
+            // ⚡ Instantly slides up your existing Llama-3 interface!
+            GlobalChatBot.show(context); 
           },
           child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
         ),

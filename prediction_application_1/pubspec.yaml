@@ -9,15 +9,16 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  syncfusion_flutter_charts: ^26.1.35 # Professional Grade Charts
-  google_fonts: ^5.1.0                # Modern Typography
+  syncfusion_flutter_charts: ^26.1.35
+  google_fonts: ^5.1.0
   http: ^1.6.0
   fl_chart: ^0.66.0
   shared_preferences: ^2.2.2
-  firebase_core: ^3.1.1
-  cloud_firestore: ^5.0.1
   web_socket_channel: ^3.0.3
   provider: ^6.1.2
+  firebase_core: ^3.1.1
+  firebase_auth: ^5.7.0
+  cloud_firestore: ^5.0.1
 
 dev_dependencies:
   flutter_test:

@@ -354,7 +354,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
           const SizedBox(height: 15),
           _insightRow("Relative Strength (RSI)", data!.rsi.toStringAsFixed(1), _getRsiStatus(data!.rsi)),
           const Divider(color: Colors.white12, height: 25),
-          _insightRow("Stock Sentiment", (data!.sentiment * 100).toStringAsFixed(0) + "%", data!.suitability),
+          _insightRow("Stock Sentiment", "${(data!.sentiment * 100).toStringAsFixed(0)}%", data!.suitability),
         ],
       ),
     );
