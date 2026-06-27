@@ -61,12 +61,16 @@ async def get_prediction(symbol: str = Query(...)):
     # Pillars 1 & 3: Pass the math to Groq to get Fundamentals & Patterns
     ai_analysis = get_hybrid_prediction(symbol, df, float(df['rsi'].iloc[-1]), lstm_future)
 
+    # ⚡ NEW: Force lowercase columns so Flutter can read them perfectly
+    history_df = df.tail(60).copy()
+    history_df.columns = [str(c).lower() for c in history_df.columns]
+
     response = {
         "symbol": symbol.upper(), 
         "current_price": current_price,
-        "history": df.tail(60).to_dict(orient="records"),
+        "history": history_df.to_dict(orient="records"),
         
-        # ⚡ KEY FIX: We now send Groq's ENRICHED path (with patterns and risk) instead of the raw LSTM array!
+        # We send Groq's ENRICHED path (with patterns and risk)
         "future_path": ai_analysis.get("future_path", lstm_future), 
         
         "action": ai_analysis.get("action", "HOLD"),
@@ -110,9 +114,13 @@ async def live_stock_stream(websocket: WebSocket, symbol: str):
         while True:
             df = await asyncio.to_thread(data_fetcher.get_enriched_data, symbol)
             if df is not None:
+                # ⚡ NEW: Apply the same lowercase fix to live websocket ticks
+                history_df = df.tail(60).copy()
+                history_df.columns = [str(c).lower() for c in history_df.columns]
+
                 await websocket.send_json({
                     "current_price": float(df['close'].iloc[-1]),
-                    "history": df.tail(60).to_dict(orient="records"),
+                    "history": history_df.to_dict(orient="records"),
                     "rsi": float(df['rsi'].iloc[-1])
                 })
             await asyncio.sleep(5)

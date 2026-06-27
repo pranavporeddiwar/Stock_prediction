@@ -230,7 +230,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     );
   }
 
-  Widget _buildChartSection() {
+Widget _buildChartSection() {
     List<ChartNode> historyNodes = [];
     DateTime currentTime = DateTime.now();
 
@@ -238,14 +238,41 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     for (int i = 0; i < data!.history.length; i++) {
       DateTime time = currentTime.subtract(Duration(minutes: 15 * (data!.history.length - 1 - i)));
       var c = data!.history[i];
-      historyNodes.add(ChartNode(time: time, open: c.open, high: c.high, low: c.low, close: c.close));
+      // ⚡ Safety Check: If open is 0 (mapping error), fallback to current price
+      double open = c.open > 0 ? c.open : data!.currentPrice;
+      double high = c.high > 0 ? c.high : data!.currentPrice;
+      double low = c.low > 0 ? c.low : data!.currentPrice;
+      double close = c.close > 0 ? c.close : data!.currentPrice;
+      
+      historyNodes.add(ChartNode(time: time, open: open, high: high, low: low, close: close));
     }
 
     DateTime cutoffTime = historyNodes.isNotEmpty ? historyNodes.last.time : currentTime;
-    double lastClose = historyNodes.isNotEmpty ? historyNodes.last.close : 0.0;
+    double lastClose = historyNodes.isNotEmpty ? historyNodes.last.close : data!.currentPrice;
     
     // Generate/Map Predicted Data
     List<ChartNode> forecastNodes = _buildForecastNodes(cutoffTime, lastClose);
+
+    // ⚡ SMART ZOOM ALGORITHM: Find the absolute highest and lowest visible points
+    double minPrice = data!.currentPrice;
+    double maxPrice = data!.currentPrice;
+
+    for (var node in historyNodes) {
+      if (node.low > 0 && node.low < minPrice) minPrice = node.low;
+      if (node.high > maxPrice) maxPrice = node.high;
+    }
+    for (var node in forecastNodes) {
+      if (node.low > 0 && node.low < minPrice) minPrice = node.low;
+      if (node.high > maxPrice) maxPrice = node.high;
+    }
+    
+    // Ensure the Target and Stop Loss lines fit on the screen too
+    if (data!.targetPrice > maxPrice) maxPrice = data!.targetPrice;
+    if (data!.targetPrice > 0 && data!.targetPrice < minPrice) minPrice = data!.targetPrice;
+
+    // Add 0.2% visual padding to the top and bottom so candles don't touch the edges
+    minPrice = minPrice * 0.998;
+    maxPrice = maxPrice * 1.002;
 
     return Column(
       children: [
@@ -256,7 +283,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             plotAreaBorderWidth: 0,
             trackballBehavior: _trackballBehavior,
             
-            // ⚡ FIXED: Added explicit Annotations instead of PlotBand text to bypass version errors
             annotations: <CartesianChartAnnotation>[
               CartesianChartAnnotation(
                 widget: Container(
@@ -266,7 +292,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                 ),
                 coordinateUnit: CoordinateUnit.point,
                 x: cutoffTime,
-                y: data!.currentPrice,
+                y: maxPrice * 0.995, // Anchor near top
               ),
               CartesianChartAnnotation(
                 widget: Container(
@@ -286,12 +312,13 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                 ),
                 coordinateUnit: CoordinateUnit.point,
                 x: cutoffTime,
-                y: data!.targetPrice * 0.96,
+                y: data!.targetPrice * 0.98,
               ),
             ],
             
             primaryXAxis: DateTimeAxis(
               dateFormat: DateFormat('HH:mm'),
+              intervalType: DateTimeIntervalType.hours, // ⚡ Cleans up overlapping time labels
               majorGridLines: const MajorGridLines(width: 0),
               labelStyle: const TextStyle(color: Colors.white54, fontSize: 10),
               plotBands: <PlotBand>[
@@ -302,12 +329,14 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                   borderColor: const Color(0xFF2B3139), 
                   borderWidth: 2, 
                   dashArray: const <double>[5, 5],
-                  // ⚡ Removed 'text' properties here to fix your compilation error
                 )
               ],
             ),
             primaryYAxis: NumericAxis(
-              opposedPosition: true, isVisible: true,
+              minimum: minPrice, // ⚡ FORCES ZOOM TO ACTUAL CANDLES
+              maximum: maxPrice, // ⚡ FORCES ZOOM TO ACTUAL CANDLES
+              opposedPosition: true, 
+              isVisible: true,
               labelStyle: const TextStyle(color: Colors.white54, fontSize: 10),
               axisLine: const AxisLine(width: 0), 
               majorGridLines: const MajorGridLines(color: Colors.white10, width: 1, dashArray: <double>[4, 4]),
@@ -316,13 +345,11 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                   isVisible: true,
                   start: data!.targetPrice, end: data!.targetPrice,
                   borderColor: neonRed, borderWidth: 1, dashArray: const <double>[4, 4],
-                  // ⚡ Removed 'text' properties here to fix your compilation error
                 ),
                 PlotBand(
                   isVisible: true,
-                  start: data!.targetPrice * 0.96, end: data!.targetPrice * 0.96,
+                  start: data!.targetPrice * 0.98, end: data!.targetPrice * 0.98,
                   borderColor: neonGreen, borderWidth: 1, dashArray: const <double>[4, 4],
-                  // ⚡ Removed 'text' properties here to fix your compilation error
                 )
               ],
             ),
@@ -347,21 +374,19 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
               // EXECUTION MARKER (BUY BUBBLE)
               if (historyNodes.isNotEmpty)
                 ScatterSeries<ChartNode, DateTime>(
-                  dataSource: [historyNodes.last], xValueMapper: (n, _) => n.time, yValueMapper: (n, _) => n.low * 0.99,
+                  dataSource: [historyNodes.last], xValueMapper: (n, _) => n.time, yValueMapper: (n, _) => n.low * 0.999,
                   markerSettings: MarkerSettings(shape: DataMarkerType.circle, color: neonGreen, height: 22, width: 22),
-  
-                  // THIS IS THE FIX:
                   dataLabelMapper: (ChartNode n, _) => "B",
                   dataLabelSettings: const DataLabelSettings(
-                  isVisible: true,
-                  textStyle: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold),
-                  labelAlignment: ChartDataLabelAlignment.middle,
+                    isVisible: true,
+                    textStyle: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold),
+                    labelAlignment: ChartDataLabelAlignment.middle,
                   ),
                 ),
               // EXECUTION MARKER (SELL BUBBLE)
               if (forecastNodes.length > 3)
                 ScatterSeries<ChartNode, DateTime>(
-                  dataSource: [forecastNodes[2]], xValueMapper: (n, _) => n.time, yValueMapper: (n, _) => n.high * 1.01,
+                  dataSource: [forecastNodes[2]], xValueMapper: (n, _) => n.time, yValueMapper: (n, _) => n.high * 1.001,
                   markerSettings: MarkerSettings(shape: DataMarkerType.circle, color: neonRed, height: 22, width: 22),
                   dataLabelMapper: (ChartNode n, _) => "S",
                   dataLabelSettings: const DataLabelSettings(
