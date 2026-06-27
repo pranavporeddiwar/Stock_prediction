@@ -54,13 +54,22 @@ async def get_prediction(symbol: str = Query(...)):
         raise HTTPException(status_code=404, detail="Data unavailable")
     
     current_price = float(df['close'].iloc[-1])
+    
+    # Pillar 2: Get pure math from the LSTM
     lstm_future = prediction_engine.generate_forecast(df)
+    
+    # Pillars 1 & 3: Pass the math to Groq to get Fundamentals & Patterns
     ai_analysis = get_hybrid_prediction(symbol, df, float(df['rsi'].iloc[-1]), lstm_future)
 
     response = {
-        "symbol": symbol.upper(), "current_price": current_price,
+        "symbol": symbol.upper(), 
+        "current_price": current_price,
         "history": df.tail(60).to_dict(orient="records"),
-        "future_path": lstm_future, "action": ai_analysis.get("action", "HOLD"),
+        
+        # ⚡ KEY FIX: We now send Groq's ENRICHED path (with patterns and risk) instead of the raw LSTM array!
+        "future_path": ai_analysis.get("future_path", lstm_future), 
+        
+        "action": ai_analysis.get("action", "HOLD"),
         "reasoning": ai_analysis.get("reasoning", "Analyzing..."),
         "target_price": ai_analysis.get("target_price", current_price * 1.02),
         "stop_loss": ai_analysis.get("stop_loss", current_price * 0.98),
