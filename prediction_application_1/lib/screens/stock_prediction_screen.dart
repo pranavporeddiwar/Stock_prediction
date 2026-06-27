@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../services/api_service.dart';
@@ -6,7 +7,7 @@ import '../models/stock_data.dart';
 import 'investment_helper_page.dart';
 import '../utils/app_state.dart'; 
 import '../widgets/bottom_nav_bar.dart';
-import '../widgets/global_chat_bot.dart'; // REQUIRED to trigger the slider overlay
+import '../widgets/global_chat_bot.dart'; 
 
 class StockPredictionScreen extends StatefulWidget {
   final String symbol;
@@ -21,13 +22,15 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
   bool isLoading = true;
   
   final LiveStreamService _streamService = LiveStreamService();
+  StreamSubscription? _streamSubscription;
   
   late TrackballBehavior _trackballBehavior;
-  late SelectionBehavior _selectionBehavior;
   late ZoomPanBehavior _zoomPanBehavior; 
 
   @override
   void initState() {
+    super.initState();
+    
     _trackballBehavior = TrackballBehavior(
       enable: true,
       activationMode: ActivationMode.singleTap,
@@ -48,11 +51,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
 
-    _selectionBehavior = SelectionBehavior(
-      enable: true,
-      unselectedOpacity: 0.4,
-    );
-
     _zoomPanBehavior = ZoomPanBehavior(
       enablePinching: true,
       enablePanning: true,
@@ -60,7 +58,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       zoomMode: ZoomMode.x, 
     );
 
-    super.initState();
     _startLiveStream();
   }
 
@@ -68,7 +65,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     if (!mounted) return;
     setState(() => isLoading = true);
     
-    // 1. Initial HTTP Fetch (Gets the initial Llama-3 AI Reasoning for UI)
     try {
       final initialData = await ApiService().fetchPrediction(widget.symbol, "intraday");
       if (mounted) {
@@ -87,8 +83,8 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       return; 
     }
 
-    // 2. Open continuous WebSocket for Live Ticks
-    _streamService.connectToLiveStream(widget.symbol).listen((liveData) {
+    // 🔒 Safely manage subscription node memory
+    _streamSubscription = _streamService.connectToLiveStream(widget.symbol).listen((liveData) {
       if (mounted && data != null) {
         setState(() {
           data = StockData(
@@ -99,7 +95,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             sentiment: data!.sentiment,
             suitability: data!.suitability,
             action: data!.action,
-            reasoning: data!.reasoning, // Keep static text for UI display
+            reasoning: data!.reasoning, 
             stopLoss: data!.stopLoss,
             targetPrice: data!.targetPrice,
             rsi: liveData.rsi,
@@ -107,9 +103,8 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
           );
         });
         
-        // ⚡ THE UPGRADE: Pass the raw mathematical parameters straight into the AI's short-term memory
+        // ⚡ Continuous syncing to the LLM agent's short-term memory block
         final String currentDateTime = DateTime.now().toString().split('.')[0];
-        
         currentBotContext.value = 
           "STOCK SYMBOL: ${widget.symbol.toUpperCase()}\n"
           "CURRENT TIMESTAMP: $currentDateTime\n"
@@ -126,13 +121,14 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
 
   @override
   void dispose() {
+    _streamSubscription?.cancel();
     _streamService.disconnect();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    bool hasData = data != null && data!.history.isNotEmpty;
+    final bool hasData = data != null && data!.history.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -170,7 +166,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                   ),
                 ),
       
-      // 🤖 The Purple AI Assistant Button
       floatingActionButton: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -185,60 +180,51 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         child: FloatingActionButton(
           backgroundColor: const Color(0xFF7B2CBF),
           shape: const CircleBorder(),
-          onPressed: () {
-            // SLIDE UP THE NEURAL TUTOR!
-            GlobalChatBot.show(context);
-          },
+          onPressed: () => GlobalChatBot.show(context),
           child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
         ),
       ),
-      
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      
       bottomNavigationBar: BottomNavBar(
         currentIndex: 0, 
-        onTap: (index) {
-          Navigator.pop(context);
-        },
+        onTap: (index) => Navigator.pop(context),
       ),
     );
   }
 
   Widget _buildAdvancedTradingChart() {
     final int historyCount = data!.history.length;
-    
-    final double initialVisibleMin = historyCount > 60 
-        ? (historyCount - 60).toDouble() 
-        : 0.0;
-    final double initialVisibleMax = (historyCount + 6).toDouble(); 
+    final double initialVisibleMin = historyCount > 60 ? (historyCount - 60).toDouble() : 0.0;
+    final double initialVisibleMax = (historyCount + 10).toDouble(); 
+
+    final bool showBuy = data!.action == "BUY";
+    final bool showSell = data!.action == "SELL";
 
     return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.45, 
+      height: MediaQuery.of(context).size.height * 0.42, 
       child: SfCartesianChart(
-        margin: const EdgeInsets.fromLTRB(5, 15, 5, 10),
+        margin: const EdgeInsets.fromLTRB(5, 15, 5, 5),
         plotAreaBorderWidth: 0,
         zoomPanBehavior: _zoomPanBehavior,
         trackballBehavior: _trackballBehavior,
-        
         primaryXAxis: NumericAxis(
           isVisible: false, 
           initialVisibleMinimum: initialVisibleMin,
           initialVisibleMaximum: initialVisibleMax,
         ),
-        
         primaryYAxis: const NumericAxis(
           opposedPosition: true, 
           anchorRangeToVisiblePoints: true, 
           labelPosition: ChartDataLabelPosition.outside,
-          labelStyle: TextStyle(color: Colors.white60, fontSize: 10),
+          labelStyle: TextStyle(color: Colors.white60, fontSize: 9),
           axisLine: AxisLine(width: 0),
           majorGridLines: MajorGridLines(color: Colors.white10, width: 0.5), 
         ),
-        
         series: <CartesianSeries>[
+          // 📊 HISTORICAL LIVE DATA 
           CandleSeries<CandleModel, int>(
             dataSource: data!.history,
-            xValueMapper: (c, i) => i,
+            xValueMapper: (_, i) => i,
             lowValueMapper: (c, _) => c.low,
             highValueMapper: (c, _) => c.high,
             openValueMapper: (c, _) => c.open,
@@ -246,60 +232,54 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             bullColor: const Color(0xFF00FFA3),
             bearColor: const Color(0xFFFF3E3E),
             enableSolidCandles: true,
-            selectionBehavior: _selectionBehavior,
           ),
+          // 🔮 AI FORECAST PATH 
           CandleSeries<CandleModel, int>(
             dataSource: data!.predictedPath,
-            xValueMapper: (c, i) => historyCount + i,
+            xValueMapper: (_, i) => historyCount + i,
             lowValueMapper: (c, _) => c.low,
             highValueMapper: (c, _) => c.high,
             openValueMapper: (c, _) => c.open,
             closeValueMapper: (c, _) => c.close,
-            opacity: 0.6,
-            dashArray: const <double>[4, 4],
+            opacity: 0.5,
+            dashArray: const <double>[3, 3],
             bullColor: const Color(0xFF00FFA3),
             bearColor: const Color(0xFFFF3E3E),
             enableSolidCandles: false,
           ),
-        ],
-        
-        annotations: <CartesianChartAnnotation>[
-          if (data!.action != "HOLD")
-            CartesianChartAnnotation(
-              widget: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(data!.action, 
-                    style: TextStyle(
-                      color: data!.action == "BUY" ? const Color(0xFF00FFA3) : const Color(0xFFFF3E3E), 
-                      fontSize: 9, 
-                      fontWeight: FontWeight.bold
-                    )
-                  ),
-                  Icon(
-                    data!.action == "BUY" ? Icons.keyboard_double_arrow_up : Icons.keyboard_double_arrow_down,
-                    color: data!.action == "BUY" ? const Color(0xFF00FFA3) : const Color(0xFFFF3E3E),
-                    size: 28,
-                  ),
-                ],
+          // ⚡ EXPLICIT BUY INDICATOR (Overlaid on last historical tick)
+          if (showBuy)
+            ScatterSeries<CandleModel, int>(
+              dataSource: [data!.history.last],
+              xValueMapper: (_, __) => historyCount - 1,
+              yValueMapper: (c, _) => c.low * 0.998, // Offset just below candle
+              markerSettings: const MarkerSettings(
+                shape: DataMarkerType.verticalLine, // Forms sharp custom arrow head
+                color: Color(0xFF00FFA3),
+                height: 14, width: 14,
               ),
-              coordinateUnit: CoordinateUnit.point,
-              x: (historyCount - 1).toDouble(),
-              y: data!.history.last.low,
+              dataLabelSettings: const DataLabelSettings(
+                isVisible: true,
+                textStyle: TextStyle(color: Color(0xFF00FFA3), fontSize: 9, fontWeight: FontWeight.bold),
+                labelAlignment: ChartDataLabelAlignment.bottom,
+              ),
             ),
-          
-          if (data!.predictedPath.isNotEmpty)
-            CartesianChartAnnotation(
-              widget: const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.flag, color: Colors.orangeAccent, size: 22),
-                  Text("TARGET", style: TextStyle(color: Colors.orangeAccent, fontSize: 8, fontWeight: FontWeight.bold)),
-                ],
+          // ⚡ EXPLICIT SELL INDICATOR (Overlaid on last historical tick)
+          if (showSell)
+            ScatterSeries<CandleModel, int>(
+              dataSource: [data!.history.last],
+              xValueMapper: (_, __) => historyCount - 1,
+              yValueMapper: (c, _) => c.high * 1.002, // Offset just above candle
+              markerSettings: const MarkerSettings(
+                shape: DataMarkerType.invertedTriangle,
+                color: Color(0xFFFF3E3E),
+                height: 12, width: 12,
               ),
-              coordinateUnit: CoordinateUnit.point,
-              x: (historyCount + data!.predictedPath.length - 1).toDouble(),
-              y: data!.targetPrice,
+              dataLabelSettings: const DataLabelSettings(
+                isVisible: true,
+                textStyle: TextStyle(color: Color(0xFFFF3E3E), fontSize: 9, fontWeight: FontWeight.bold),
+                labelAlignment: ChartDataLabelAlignment.top,
+              ),
             ),
         ],
       ),
@@ -308,24 +288,23 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
 
   Widget _buildTradeExecutionCard() {
     final bool isBuy = data!.action == "BUY";
+    final Color actionColor = isBuy ? const Color(0xFF00FFA3) : (data!.action == "SELL" ? Colors.redAccent : Colors.orangeAccent);
+    
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      padding: const EdgeInsets.all(22),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isBuy ? const Color(0xFF002B1B) : const Color(0xFF2B0000),
+        color: isBuy ? const Color(0xFF001F13) : (data!.action == "SELL" ? const Color(0xFF240000) : const Color(0xFF141414)),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isBuy ? const Color(0xFF00FFA3) : Colors.redAccent, 
-          width: 1
-        ),
+        border: Border.all(color: actionColor.withOpacity(0.4), width: 1),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text("NEURAL SIGNAL", style: TextStyle(color: isBuy ? const Color(0xFF00FFA3) : Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            const SizedBox(height: 6),
-            Text(data!.action, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900)),
+            Text("NEURAL SIGNAL", style: TextStyle(color: actionColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const SizedBox(height: 4),
+            Text(data!.action, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
           ]),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text("TARGET: ₹${data!.targetPrice.toStringAsFixed(1)}", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
@@ -339,11 +318,11 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
 
   Widget _buildTechnicalInsights() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D0D),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
@@ -351,9 +330,9 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         children: [
           const Text("HYBRID DATA FUSION", 
             style: TextStyle(color: Color(0xFF00FFA3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-          const SizedBox(height: 15),
+          const SizedBox(height: 12),
           _insightRow("Relative Strength (RSI)", data!.rsi.toStringAsFixed(1), _getRsiStatus(data!.rsi)),
-          const Divider(color: Colors.white12, height: 25),
+          const Divider(color: Colors.white12, height: 20),
           _insightRow("Stock Sentiment", "${(data!.sentiment * 100).toStringAsFixed(0)}%", data!.suitability),
         ],
       ),
@@ -362,26 +341,25 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
 
   Widget _buildNeuralReasoning() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(25, 10, 25, 40),
+      padding: const EdgeInsets.fromLTRB(25, 8, 25, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("GROQ AI THESIS", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Text(data!.reasoning, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.6, letterSpacing: 0.3)),
-          const SizedBox(height: 35),
+          const Text("GROQ AI THESIS", style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Text(data!.reasoning, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.5)),
+          const SizedBox(height: 30),
           SizedBox(
             width: double.infinity,
-            height: 58,
+            height: 55,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF00FFA3),
                 foregroundColor: Colors.black,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 0,
               ),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InvestmentHelperPage(data: data!))),
-              child: const Text("PROCEED TO CAPITAL ALLOCATION", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1)),
+              child: const Text("PROCEED TO CAPITAL ALLOCATION", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
             ),
           )
         ],
@@ -390,6 +368,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
   }
 
   Widget _insightRow(String label, String value, String status) {
+    final bool isPositive = status.contains("BULLISH") || status == "OVERSOLD" || status.contains("HIGH");
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -399,7 +378,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             Text(value, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
             const SizedBox(width: 8),
             Text(status, style: TextStyle(
-              color: status.contains("BULLISH") || status == "OVERSOLD" ? const Color(0xFF00FFA3) : Colors.orangeAccent,
+              color: isPositive ? const Color(0xFF00FFA3) : Colors.orangeAccent,
               fontSize: 10, fontWeight: FontWeight.bold
             )),
           ],
@@ -419,9 +398,9 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.query_stats, color: Colors.white10, size: 60),
-          const SizedBox(height: 20),
-          const Text("OFFLINE", style: TextStyle(color: Colors.white24, letterSpacing: 2)),
+          const Icon(Icons.query_stats, color: Colors.white10, size: 50),
+          const SizedBox(height: 15),
+          const Text("SERVER OFFLINE", style: TextStyle(color: Colors.white24, letterSpacing: 1.5, fontSize: 12)),
           TextButton(
             onPressed: _startLiveStream, 
             child: const Text("RECONNECT", style: TextStyle(color: Color(0xFF00FFA3)))

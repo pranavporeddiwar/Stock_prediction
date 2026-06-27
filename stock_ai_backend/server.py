@@ -1,84 +1,111 @@
-import sys
 import os
-import pandas as pd
-from fastapi import FastAPI, HTTPException
-import uvicorn
+import asyncio
+from fastapi import FastAPI, Query, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from main import get_prediction
+from datetime import datetime
+import firebase_admin
+from firebase_admin import credentials, firestore
 
+# --- INTERNAL NEURAL SERVICES ---
+from app.services.data_fetcher import DataFetcher
+from app.services.prediction_service import PredictionService
+from app.services.watchlist_service import WatchlistService
+from app.services.ai_agent import get_hybrid_prediction
+from app.services.backtest_service import perform_strategy_simulation  # 🔬 NEW: Backtest Engine Import
 
-# Add 'app' to system path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
-
-
-app = FastAPI()
-
-# --- CORS SETUP ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# --- LOCAL CSV TOKEN LOOKUP ---
-CSV_FILE_NAME = "NSE_Symbols.csv" 
-token_df = None
-
-def load_local_tokens():
-    global token_df
-    print(f"📂 Loading Local Token LUT: {CSV_FILE_NAME}...")
+# --- FIREBASE SETUP ---
+def init_firebase():
     try:
-        token_df = pd.read_csv(CSV_FILE_NAME)
-        token_df.columns = [c.strip() for c in token_df.columns]
-        if 'exch_seg' in token_df.columns:
-            token_df = token_df[token_df['exch_seg'] == 'NSE']
-        print(f"✅ Successfully mapped {len(token_df)} NSE instruments.")
+        cred = credentials.Certificate("/etc/secrets/serviceAccountKey.json") if os.path.exists("/etc/secrets/serviceAccountKey.json") else credentials.Certificate("serviceAccountKey.json")
+        firebase_admin.initialize_app(cred)
+        return firestore.client()
     except Exception as e:
-        print(f"❌ Error reading CSV: {e}")
+        print(f"❌ Firebase Init Error: {e}")
+        return None
 
-@app.on_event("startup")
-async def startup_event():
-    load_local_tokens()
+db = init_firebase()
+app = FastAPI(title="Neural Stream Backend")
 
-def get_token_from_csv(user_input: str):
-    if token_df is None: return None
-    user_input = user_input.upper().strip()
-    try:
-        match = token_df[token_df['name'].str.upper() == user_input]
-        if not match.empty:
-            return str(match.iloc[0]['token'])
-        match_alt = token_df[token_df['symbol'].str.upper() == user_input]
-        if not match_alt.empty:
-            return str(match_alt.iloc[0]['token'])
-    except Exception as e:
-        print(f"🔍 Search error: {e}")
-    return None
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- DYNAMIC API ROUTE ---
-@app.get("/predict/{user_input}")
-async def get_prediction(user_input: str):
-    token = get_token_from_csv(user_input)
-    
-    if not token:
-        return {"status": "error", "message": f"Symbol '{user_input}' not found."}
+# Services initialization
+data_fetcher = DataFetcher()
+prediction_engine = PredictionService()
+watchlist_manager = WatchlistService(fetcher_instance=data_fetcher)
 
-    print(f"🚀 Found Match: {user_input} -> Token {token}")
-
-    # Pass the resolved token to the logic in main.py
-    data = await get_prediction_data(symbol=user_input.upper(), token=token)
-    
-    if data:
-        # We ensure 'status' is success because Flutter checks this
-        return {**data, "status": "success"}
-        
+# ==========================================
+# 🩺 CLOUD HEALTH CHECK
+# ==========================================
+@app.get("/health-check")
+async def health_check():
     return {
-        "status": "offline", 
-        "symbol": user_input.upper(),
-        "current_price": 0.0, 
-        "forecast": [], 
-        "trend_percent": 0.0
+        "status": "operational" if (data_fetcher.api and prediction_engine.model and db) else "degraded",
+        "nodes": {"broker": bool(data_fetcher.api), "ai_engine": bool(prediction_engine.model), "cloud_db": bool(db)},
+        "timestamp": datetime.now().isoformat()
     }
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# ==========================================
+# 🧠 PRIMARY AI PREDICTION ENDPOINT
+# ==========================================
+@app.get("/predict")
+async def get_prediction(symbol: str = Query(...)):
+    df = await asyncio.to_thread(data_fetcher.get_enriched_data, symbol)
+    if df is None or df.empty: 
+        raise HTTPException(status_code=404, detail="Data unavailable")
+    
+    current_price = float(df['close'].iloc[-1])
+    lstm_future = prediction_engine.generate_forecast(df)
+    ai_analysis = get_hybrid_prediction(symbol, df, float(df['rsi'].iloc[-1]), lstm_future)
+
+    response = {
+        "symbol": symbol.upper(), "current_price": current_price,
+        "history": df.tail(60).to_dict(orient="records"),
+        "future_path": lstm_future, "action": ai_analysis.get("action", "HOLD"),
+        "reasoning": ai_analysis.get("reasoning", "Analyzing..."),
+        "target_price": ai_analysis.get("target_price", current_price * 1.02),
+        "stop_loss": ai_analysis.get("stop_loss", current_price * 0.98),
+        "sentiment": 0.72
+    }
+    return response
+
+# ==========================================
+# 🔬 BACKTEST STRATEGY LAB ENDPOINT
+# ==========================================
+@app.get("/backtest/{symbol}")
+async def run_backtest(symbol: str):
+    print(f"🔬 Running Strategy Simulation for {symbol.upper()}...")
+    df = await asyncio.to_thread(data_fetcher.get_enriched_data, symbol)
+    
+    if df is None or df.empty:
+        raise HTTPException(status_code=404, detail=f"Market data unavailable for {symbol.upper()}")
+    
+    try:
+        # Run the historical data through the simulation engine
+        report = perform_strategy_simulation(df, prediction_engine)
+        
+        # Attach the symbol to the payload for frontend context
+        report["symbol"] = symbol.upper()
+        
+        return report
+    except Exception as e:
+        print(f"❌ Backtest Engine Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal simulation error")
+
+# ==========================================
+# ⚡ WEBSOCKET LIVE STREAM
+# ==========================================
+@app.websocket("/ws/live/{symbol}")
+async def live_stock_stream(websocket: WebSocket, symbol: str):
+    await websocket.accept()
+    try:
+        while True:
+            df = await asyncio.to_thread(data_fetcher.get_enriched_data, symbol)
+            if df is not None:
+                await websocket.send_json({
+                    "current_price": float(df['close'].iloc[-1]),
+                    "history": df.tail(60).to_dict(orient="records"),
+                    "rsi": float(df['rsi'].iloc[-1])
+                })
+            await asyncio.sleep(5)
+    except WebSocketDisconnect: 
+        pass
