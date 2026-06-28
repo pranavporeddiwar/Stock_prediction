@@ -1,16 +1,27 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // ☁️ INJECTED
-import 'package:firebase_auth/firebase_auth.dart';     // 🔐 INJECTED
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/portfolio_item.dart';
 import 'api_service.dart';
+import 'notification_service.dart';
 
 class PortfolioService extends ChangeNotifier {
   final List<PortfolioItem> _ownedStocks = [];
   final Map<String, WebSocketChannel> _activeSockets = {};
+  final NotificationService _notificationService = NotificationService();
+  
+  // Track which profit thresholds have been notified per symbol to avoid spam
+  final Map<String, Set<int>> _notifiedThresholds = {};
+  // Profit thresholds in percentage — notify at each milestone
+  static const List<int> _profitThresholds = [2, 5, 10, 15, 20];
+  
+  // Track alert-enabled symbols
+  final Set<String> _alertEnabledSymbols = {};
 
   List<PortfolioItem> get ownedStocks => _ownedStocks;
+  Set<String> get alertEnabledSymbols => _alertEnabledSymbols;
 
   double get overallInvestment => _ownedStocks.fold(0, (sum, item) => sum + item.totalInvestment);
   double get overallValue => _ownedStocks.fold(0, (sum, item) => sum + item.currentValue);
@@ -18,7 +29,8 @@ class PortfolioService extends ChangeNotifier {
   double get overallPnLPercentage => overallInvestment > 0 ? (overallPnL / overallInvestment) * 100 : 0.0;
 
   PortfolioService() {
-    // ⚡ THE SYNC ENGINE: Listen for Login/Logout events
+    _notificationService.init();
+    // Listen for Login/Logout events
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
         _loadPortfolioFromCloud(user.uid);
@@ -28,7 +40,19 @@ class PortfolioService extends ChangeNotifier {
     });
   }
 
-  // 📥 DOWNLOAD FROM CLOUD
+  bool isAlertEnabled(String symbol) => _alertEnabledSymbols.contains(symbol);
+  
+  void toggleAlert(String symbol) {
+    if (_alertEnabledSymbols.contains(symbol)) {
+      _alertEnabledSymbols.remove(symbol);
+    } else {
+      _alertEnabledSymbols.add(symbol);
+      _notifiedThresholds[symbol] = {}; // Reset thresholds when re-enabled
+    }
+    notifyListeners();
+  }
+
+  // Download portfolio from Cloud
   Future<void> _loadPortfolioFromCloud(String uid) async {
     try {
       final snapshot = await FirebaseFirestore.instance
@@ -53,24 +77,25 @@ class PortfolioService extends ChangeNotifier {
             currentLivePrice: buyPrice,
           );
           _ownedStocks.add(newItem);
-          
-          // Re-establish the WebSocket connection for the downloaded asset
+          // Auto-enable alerts for all portfolio items
+          _alertEnabledSymbols.add(symbol);
+          _notifiedThresholds[symbol] = {};
           _subscribeToLiveTick(symbol);
         }
       }
       notifyListeners();
-      print("☁️ Synced ${_ownedStocks.length} assets from Firestore.");
+      print("Synced ${_ownedStocks.length} assets from Firestore.");
     } catch (e) {
-      print("⚠️ Cloud sync error: $e");
+      print("Cloud sync error: $e");
     }
   }
 
-  // 📤 UPLOAD TO CLOUD & LOCAL UI
+  // Upload to Cloud & Local UI
   void addPosition(String symbol, int qty, double buyPrice) async {
     final cleanSymbol = symbol.trim().toUpperCase();
     if (cleanSymbol.isEmpty || qty <= 0 || buyPrice <= 0) return;
 
-    // Check if position already exists to prevent duplicate stream channels
+    // Check if position already exists
     final existingIndex = _ownedStocks.indexWhere((item) => item.symbol == cleanSymbol);
     if (existingIndex >= 0) return;
 
@@ -78,14 +103,17 @@ class PortfolioService extends ChangeNotifier {
       symbol: cleanSymbol,
       quantity: qty,
       averageBuyPrice: buyPrice,
-      currentLivePrice: buyPrice, // Base fallback until first socket broadcast arrives
+      currentLivePrice: buyPrice,
     );
 
     _ownedStocks.add(newItem);
-    notifyListeners(); // Update UI instantly
-    _subscribeToLiveTick(cleanSymbol); // Start socket stream
+    // Auto-enable profit alerts when adding a new position
+    _alertEnabledSymbols.add(cleanSymbol);
+    _notifiedThresholds[cleanSymbol] = {};
+    notifyListeners();
+    _subscribeToLiveTick(cleanSymbol);
 
-    // ☁️ Push to Firestore in the background
+    // Push to Firestore
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
@@ -93,7 +121,7 @@ class PortfolioService extends ChangeNotifier {
             .collection('users')
             .doc(user.uid)
             .collection('portfolio')
-            .doc(cleanSymbol) // Using symbol as the document ID
+            .doc(cleanSymbol)
             .set({
           'symbol': cleanSymbol,
           'quantity': qty,
@@ -101,7 +129,7 @@ class PortfolioService extends ChangeNotifier {
           'addedAt': FieldValue.serverTimestamp(),
         });
       } catch (e) {
-        print("⚠️ Failed to write $cleanSymbol to cloud: $e");
+        print("Failed to write $cleanSymbol to cloud: $e");
       }
     }
   }
@@ -120,29 +148,68 @@ class PortfolioService extends ChangeNotifier {
           if (data['current_price'] != null) {
             final targetIndex = _ownedStocks.indexWhere((item) => item.symbol == symbol);
             if (targetIndex >= 0) {
-              _ownedStocks[targetIndex].currentLivePrice = data['current_price'].toDouble();
-              notifyListeners(); // Drives instant UI state shifts
+              final newPrice = data['current_price'].toDouble();
+              _ownedStocks[targetIndex].currentLivePrice = newPrice;
+              notifyListeners();
+              
+              // Check profit thresholds and send notifications
+              _checkAndNotifyProfit(_ownedStocks[targetIndex]);
             }
           }
         },
-        onError: (err) => print("❌ Portfolio Stream Error for $symbol: $err"),
+        onError: (err) => print("Portfolio Stream Error for $symbol: $err"),
         onDone: () {
-           print("🔌 Portfolio Stream Closed for $symbol");
+           print("Portfolio Stream Closed for $symbol");
            _activeSockets.remove(symbol);
         }
       );
     } catch (e) {
-      print("⚠️ Matrix WebSocket failure: $e");
+      print("WebSocket failure for $symbol: $e");
     }
   }
 
-  // 🧹 CLEANUP ON LOGOUT
+  /// Checks if the stock has crossed any profit threshold and sends notification
+  void _checkAndNotifyProfit(PortfolioItem item) {
+    if (!_alertEnabledSymbols.contains(item.symbol)) return;
+    
+    final profitPct = item.profitLossPercentage;
+    final symbol = item.symbol;
+    
+    _notifiedThresholds.putIfAbsent(symbol, () => {});
+    
+    for (final threshold in _profitThresholds) {
+      if (profitPct >= threshold && !_notifiedThresholds[symbol]!.contains(threshold)) {
+        _notifiedThresholds[symbol]!.add(threshold);
+        _notificationService.showProfitAlert(
+          symbol: symbol,
+          profitPercent: profitPct,
+          currentPrice: item.currentLivePrice,
+          buyPrice: item.averageBuyPrice,
+        );
+        break; // Only send one notification per tick
+      }
+    }
+    
+    // Also check for loss thresholds (stop loss alerts at -2%, -5%)
+    if (profitPct <= -2 && !_notifiedThresholds[symbol]!.contains(-2)) {
+      _notifiedThresholds[symbol]!.add(-2);
+      _notificationService.showStopLossAlert(
+        symbol: symbol,
+        currentPrice: item.currentLivePrice,
+        stopLoss: item.averageBuyPrice * 0.98,
+      );
+    }
+  }
+
+  // Cleanup on logout
   void _clearPortfolio() {
     _ownedStocks.clear();
     for (var channel in _activeSockets.values) {
       channel.sink.close();
     }
     _activeSockets.clear();
+    _alertEnabledSymbols.clear();
+    _notifiedThresholds.clear();
     notifyListeners();
   }
 
@@ -151,4 +218,4 @@ class PortfolioService extends ChangeNotifier {
     _clearPortfolio();
     super.dispose();
   }
-}
+}

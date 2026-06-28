@@ -31,7 +31,12 @@ class InvestmentAnalysisPage extends StatelessWidget {
         centerTitle: true,
         title: const Text(
           "CAPITAL ANALYSIS",
-          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+          ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -41,14 +46,36 @@ class InvestmentAnalysisPage extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 25),
-            _buildDataCard("QUANTITY TO ACQUIRE", "$shares UNITS", Icons.shopping_cart_outlined, const Color(0xFF00FFA3)),
-            _buildDataCard("DEPLOYMENT CAPITAL", "₹${totalCost.toStringAsFixed(2)}", Icons.account_balance_wallet_outlined, Colors.white),
+            _buildDataCard(
+              "QUANTITY TO ACQUIRE",
+              "$shares UNITS",
+              Icons.shopping_cart_outlined,
+              const Color(0xFF00FFA3),
+            ),
+            _buildDataCard(
+              "DEPLOYMENT CAPITAL",
+              "₹${totalCost.toStringAsFixed(2)}",
+              Icons.account_balance_wallet_outlined,
+              Colors.white,
+            ),
             const SizedBox(height: 15),
             Row(
               children: [
-                Expanded(child: _buildMiniCard("STOP LOSS (EXIT)", "₹${stopLossPrice.toStringAsFixed(2)}", Colors.redAccent)),
+                Expanded(
+                  child: _buildMiniCard(
+                    "STOP LOSS (EXIT)",
+                    "₹${stopLossPrice.toStringAsFixed(2)}",
+                    Colors.redAccent,
+                  ),
+                ),
                 const SizedBox(width: 15),
-                Expanded(child: _buildMiniCard("TARGET (PROFIT)", "₹${targetPrice.toStringAsFixed(2)}", const Color(0xFF00FFA3))),
+                Expanded(
+                  child: _buildMiniCard(
+                    "TARGET (PROFIT)",
+                    "₹${targetPrice.toStringAsFixed(2)}",
+                    const Color(0xFF00FFA3),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 35),
@@ -60,7 +87,12 @@ class InvestmentAnalysisPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDataCard(String title, String value, IconData icon, Color accentColor) {
+  Widget _buildDataCard(
+    String title,
+    String value,
+    IconData icon,
+    Color accentColor,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(25),
@@ -76,11 +108,25 @@ class InvestmentAnalysisPage extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 5),
-              Text(value, style: TextStyle(color: accentColor, fontSize: 22, fontWeight: FontWeight.w900)),
+              Text(
+                value,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ],
-          )
+          ),
         ],
       ),
     );
@@ -97,9 +143,23 @@ class InvestmentAnalysisPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(color: color.withOpacity(0.6), fontSize: 8, fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: TextStyle(
+              color: color.withOpacity(0.6),
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 10),
-          Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -112,18 +172,39 @@ class InvestmentAnalysisPage extends StatelessWidget {
       decoration: BoxDecoration(
         color: highRisk ? const Color(0x1AFF5252) : const Color(0x1A00FFA3),
         borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: highRisk ? Colors.redAccent.withOpacity(0.2) : const Color(0xFF00FFA3).withOpacity(0.2)),
+        border: Border.all(
+          color: highRisk
+              ? Colors.redAccent.withOpacity(0.2)
+              : const Color(0xFF00FFA3).withOpacity(0.2),
+        ),
       ),
       child: Column(
         children: [
-          Icon(highRisk ? Icons.warning_amber_rounded : Icons.verified_user_outlined, color: highRisk ? Colors.redAccent : const Color(0xFF00FFA3), size: 30),
+          Icon(
+            highRisk
+                ? Icons.warning_amber_rounded
+                : Icons.verified_user_outlined,
+            color: highRisk ? Colors.redAccent : const Color(0xFF00FFA3),
+            size: 30,
+          ),
           const SizedBox(height: 15),
-          Text(highRisk ? "EXPOSURE ALERT" : "RISK CLEARANCE GRANTED", style: TextStyle(color: highRisk ? Colors.redAccent : const Color(0xFF00FFA3), fontSize: 13, fontWeight: FontWeight.bold)),
+          Text(
+            highRisk ? "EXPOSURE ALERT" : "RISK CLEARANCE GRANTED",
+            style: TextStyle(
+              color: highRisk ? Colors.redAccent : const Color(0xFF00FFA3),
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 12),
           Text(
-            "Neural assessment shows a total loss potential of ₹${risk.toStringAsFixed(2)}. Ensure this fits your daily drawdown limits.", 
-            textAlign: TextAlign.center, 
-            style: const TextStyle(color: Colors.white60, fontSize: 11, height: 1.6)
+            "Neural assessment shows a total loss potential of ₹${risk.toStringAsFixed(2)}. Ensure this fits your daily drawdown limits.",
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+              height: 1.6,
+            ),
           ),
         ],
       ),

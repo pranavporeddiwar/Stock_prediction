@@ -1,14 +1,74 @@
+class CandleModel {
+  final DateTime? time; // ⚡ NEW
+  final double open;
+  final double high;
+  final double low;
+  final double close;
+  final double? volume; // ⚡ NEW
+  
+  // AI LLM Properties
+  final String? pattern;
+  final String? risk;
+
+  CandleModel({
+    this.time, // ⚡ NEW
+    required this.open,
+    required this.high,
+    required this.low,
+    required this.close,
+    this.volume, // ⚡ NEW
+    this.pattern,
+    this.risk,
+  });
+
+  factory CandleModel.fromJson(Map<String, dynamic> json) {
+    // ⚡ Bulletproof Number Parser: Handles int, double, or String seamlessly
+    double parseDouble(dynamic val, double fallback) {
+      if (val == null) return fallback;
+      if (val is num) return val.toDouble();
+      if (val is String) return double.tryParse(val) ?? fallback;
+      return fallback;
+    }
+
+    // If OHL are missing (like in raw future predictions), fall back to the Close price
+    double closePrice = parseDouble(json['close'], 0.0);
+
+    return CandleModel(
+      open: parseDouble(json['open'], closePrice),
+      high: parseDouble(json['high'], closePrice),
+      low: parseDouble(json['low'], closePrice),
+      close: closePrice,
+      volume: parseDouble(json['volume'], 0.0), // ⚡ NEW
+      pattern: json['pattern']?.toString(),
+      risk: json['risk']?.toString(),
+    );
+  }
+}
+
 class StockData {
   final String symbol;
   final double currentPrice;
   final List<CandleModel> history;
-  final List<CandleModel> predictedPath; // Full candles for future graph
+  final List<CandleModel> predictedPath;
+  
+  // AI Metrics
   final double sentiment;
   final String suitability;
-  final String action;     // "BUY", "SELL", or "HOLD"
-  final String reasoning;  // The Trade Thesis from AI
-  final double stopLoss;   // Specific SL Price
-  final double targetPrice;// Specific TP Price
+  final String action;
+  final String reasoning;
+  final double targetPrice;
+  final double stopLoss;
+  
+  // NEW: Buy/Sell Timing
+  final String buyTime;
+  final String sellTime;
+  
+  // NEW: Trading Style
+  final String tradingStyle;
+  final String styleReason;
+  final String riskLevel;
+  
+  // Technicals
   final double rsi;
   final String trendLogic;
 
@@ -21,76 +81,56 @@ class StockData {
     required this.suitability,
     required this.action,
     required this.reasoning,
-    required this.stopLoss,
     required this.targetPrice,
+    required this.stopLoss,
+    required this.buyTime,
+    required this.sellTime,
+    required this.tradingStyle,
+    required this.styleReason,
+    required this.riskLevel,
     required this.rsi,
     required this.trendLogic,
   });
 
   factory StockData.fromJson(Map<String, dynamic> json) {
-    // Helper to safely convert any number type to double
-    double forceDouble(dynamic val) {
-      if (val == null) return 0.0;
-      return (val as num).toDouble();
+    // Bulletproof Number Parser
+    double parseDouble(dynamic val, double fallback) {
+      if (val == null) return fallback;
+      if (val is num) return val.toDouble();
+      if (val is String) return double.tryParse(val) ?? fallback;
+      return fallback;
     }
 
     return StockData(
-      symbol: json['symbol']?.toString() ?? 'N/A',
-      currentPrice: forceDouble(json['current_price']),
-      sentiment: forceDouble(json['sentiment']),
-      suitability: json['suitability']?.toString() ?? 'ANALYZING...',
+      symbol: json['symbol']?.toString() ?? 'UNKNOWN',
+      currentPrice: parseDouble(json['current_price'], 0.0),
       
-      // Mapped from AI response keys
+      // Map History Data
+      history: (json['history'] as List<dynamic>?)?.map((e) {
+        if (e is Map<String, dynamic>) return CandleModel.fromJson(e);
+        return CandleModel(open: 0, high: 0, low: 0, close: 0);
+      }).toList() ?? [],
+      
+      // Map Predicted AI Path 
+      predictedPath: (json['future_path'] as List<dynamic>?)?.map((e) {
+        if (e is num) return CandleModel.fromJson({'close': e});
+        if (e is Map<String, dynamic>) return CandleModel.fromJson(e);
+        return CandleModel(open: 0, high: 0, low: 0, close: 0);
+      }).toList() ?? [],
+
+      sentiment: parseDouble(json['sentiment'], 0.5),
+      suitability: json['suitability']?.toString() ?? 'Neutral',
       action: json['action']?.toString() ?? 'HOLD',
       reasoning: json['reasoning']?.toString() ?? 'Analyzing market momentum...',
-      
-      // If your backend sends specific prices, use those. 
-      // Otherwise, it calculates them based on the current price.
-      stopLoss: forceDouble(json['stop_loss'] ?? (forceDouble(json['current_price']) * 0.98)),
-      targetPrice: forceDouble(json['target_price'] ?? (forceDouble(json['current_price']) * 1.05)),
-      
-      rsi: forceDouble(json['rsi'] ?? 50.0),
-      trendLogic: json['trend_logic']?.toString() ?? 'NEUTRAL_TREND',
-
-      // Parse Historical Candles (Real Data)
-      history: (json['history'] as List? ?? [])
-          .map((e) => CandleModel.fromJson(e))
-          .toList(),
-      
-      // Parse Predicted Future Candles (The Future Graph)
-      predictedPath: (json['future_path'] as List? ?? [])
-          .map((e) => CandleModel.fromJson(e))
-          .toList(),
-    );
-  }
-}
-
-class CandleModel {
-  final DateTime time;
-  final double open;
-  final double high;
-  final double low;
-  final double close;
-  final double volume;
-
-  CandleModel({
-    required this.time,
-    required this.open,
-    required this.high,
-    required this.low,
-    required this.close,
-    required this.volume,
-  });
-
-  factory CandleModel.fromJson(Map<String, dynamic> json) {
-    return CandleModel(
-      // Handles potential null or missing timestamps
-      time: DateTime.parse(json['time'] ?? DateTime.now().toIso8601String()),
-      open: (json['open'] as num? ?? 0.0).toDouble(),
-      high: (json['high'] as num? ?? 0.0).toDouble(),
-      low: (json['low'] as num? ?? 0.0).toDouble(),
-      close: (json['close'] as num? ?? 0.0).toDouble(),
-      volume: (json['volume'] as num? ?? 0.0).toDouble(), // 👈 FIX: Volume is now safely parsed!
+      targetPrice: parseDouble(json['target_price'], 0.0),
+      stopLoss: parseDouble(json['stop_loss'], 0.0),
+      buyTime: json['buy_time']?.toString() ?? '',
+      sellTime: json['sell_time']?.toString() ?? '',
+      tradingStyle: json['trading_style']?.toString() ?? 'Intraday',
+      styleReason: json['style_reason']?.toString() ?? 'Default strategy.',
+      riskLevel: json['risk_level']?.toString() ?? 'Medium',
+      rsi: parseDouble(json['rsi'], 50.0),
+      trendLogic: json['trendLogic']?.toString() ?? 'Standard tracking',
     );
   }
 }

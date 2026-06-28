@@ -45,12 +45,31 @@ class WatchlistService:
                     prev_close = float(df['close'].iloc[-2]) if len(df) > 1 else last_close
                     pct_change = ((last_close - prev_close) / prev_close) * 100
                     rsi = float(df['rsi'].iloc[-1]) if 'rsi' in df.columns else 50.0
+                    atr = float(df['atr'].iloc[-1]) if 'atr' in df.columns else 0
+                    volatility = (atr / last_close) * 100 if last_close > 0 else 0
+                    
+                    # Determine trading style based on technicals
+                    if volatility > 2.0 and (rsi > 70 or rsi < 30):
+                        trading_style = "Scalping"
+                        style_reason = f"High volatility ({volatility:.1f}%) with extreme RSI ({rsi:.0f}) creates quick profit opportunities."
+                    elif volatility > 1.0 and 30 < rsi < 70:
+                        trading_style = "Intraday"
+                        style_reason = f"Moderate volatility ({volatility:.1f}%) with balanced RSI ({rsi:.0f}) suits same-day trades."
+                    elif 0.5 < volatility <= 1.5:
+                        trading_style = "Swing"
+                        style_reason = f"Steady trend with {volatility:.1f}% volatility. Hold 2-5 days for optimal returns."
+                    else:
+                        trading_style = "Positional"
+                        style_reason = f"Low volatility ({volatility:.1f}%) suggests a stable long-term trend. Hold for weeks."
                     
                     fresh_data.append({
                         "symbol": symbol,
                         "current_price": last_close,
-                        "change_pct": pct_change,
-                        "rsi": rsi,
+                        "change_pct": round(pct_change, 2),
+                        "rsi": round(rsi, 1),
+                        "volatility": round(volatility, 2),
+                        "trading_style": trading_style,
+                        "style_reason": style_reason,
                         "status": "BULLISH" if pct_change > 0 else "BEARISH"
                     })
             except Exception as e:

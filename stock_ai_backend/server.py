@@ -95,9 +95,10 @@ watchlist_manager = WatchlistService(fetcher_instance=data_fetcher)
 # ==========================================
 @app.get("/health-check")
 async def health_check():
+    broker_alive = await asyncio.to_thread(data_fetcher.is_session_alive)
     return {
-        "status": "operational" if (data_fetcher.api and prediction_engine.model and db) else "degraded",
-        "nodes": {"broker": bool(data_fetcher.api), "ai_engine": bool(prediction_engine.model), "cloud_db": bool(db)},
+        "status": "operational" if (broker_alive and prediction_engine.model and db) else "degraded",
+        "nodes": {"broker": broker_alive, "ai_engine": bool(prediction_engine.model), "cloud_db": bool(db)},
         "timestamp": datetime.now().isoformat()
     }
 
@@ -107,18 +108,19 @@ async def health_check():
 @app.get("/watchlist")
 async def sync_watchlist():
     try:
-        # Check if your WatchlistService has a method named 'get_watchlist'
-        if hasattr(watchlist_manager, 'get_watchlist'):
-            data = await asyncio.to_thread(watchlist_manager.get_watchlist)
-            return data
+        # Use the enriched market overview with trading styles and technicals
+        data = await watchlist_manager.get_market_overview()
+        if data:
+            return data  # Returns list of {symbol, current_price, change_pct, rsi, volatility, trading_style, ...}
         else:
-            # ⚡ SAFE FALLBACK: If the service method isn't fully coded yet, 
-            # this returns a dummy list so the Flutter app stops crashing/spamming 404s!
-            return {
-                "symbols": ["SBIN", "RELIANCE", "TCS", "HDFCBANK", "INFY"],
-                "status": "synced",
-                "message": "Watchlist telemetry matrix synced successfully"
-            }
+            # Fallback if no enriched data available
+            return [
+                {"symbol": "SBIN", "current_price": 0, "change_pct": 0, "rsi": 50, "volatility": 0, "trading_style": "Intraday", "style_reason": "Loading...", "status": "NEUTRAL"},
+                {"symbol": "RELIANCE", "current_price": 0, "change_pct": 0, "rsi": 50, "volatility": 0, "trading_style": "Swing", "style_reason": "Loading...", "status": "NEUTRAL"},
+                {"symbol": "TCS", "current_price": 0, "change_pct": 0, "rsi": 50, "volatility": 0, "trading_style": "Positional", "style_reason": "Loading...", "status": "NEUTRAL"},
+                {"symbol": "HDFCBANK", "current_price": 0, "change_pct": 0, "rsi": 50, "volatility": 0, "trading_style": "Intraday", "style_reason": "Loading...", "status": "NEUTRAL"},
+                {"symbol": "INFY", "current_price": 0, "change_pct": 0, "rsi": 50, "volatility": 0, "trading_style": "Swing", "style_reason": "Loading...", "status": "NEUTRAL"},
+            ]
     except Exception as e:
         print(f"❌ Watchlist Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to sync watchlist telemetry matrix")
@@ -128,9 +130,23 @@ async def sync_watchlist():
 # ==========================================
 @app.get("/predict")
 async def get_prediction(symbol: str = Query(...)):
+    # Check broker connectivity first
+    if not data_fetcher.api:
+        raise HTTPException(status_code=503, detail="Broker session offline. Reconnecting...")
+    
+    # Check if symbol exists in the lookup table
+    query = symbol.upper().strip()
+    if not data_fetcher.symbols_lut.empty:
+        match = data_fetcher.symbols_lut[
+            (data_fetcher.symbols_lut['symbol'].str.upper() == query) | 
+            (data_fetcher.symbols_lut['symbol'].str.upper() == f"{query}-EQ")
+        ]
+        if match.empty:
+            raise HTTPException(status_code=404, detail=f"Symbol '{query}' not found in NSE listings")
+    
     df = await asyncio.to_thread(data_fetcher.get_enriched_data, symbol)
     if df is None or df.empty: 
-        raise HTTPException(status_code=404, detail="Data unavailable")
+        raise HTTPException(status_code=404, detail="Market data unavailable. Markets may be closed or broker session expired.")
     
     current_price = float(df['close'].iloc[-1])
     
@@ -153,9 +169,47 @@ async def get_prediction(symbol: str = Query(...)):
         "reasoning": ai_analysis.get("reasoning", "Analyzing..."),
         "target_price": ai_analysis.get("target_price", current_price * 1.02),
         "stop_loss": ai_analysis.get("stop_loss", current_price * 0.98),
+        "buy_time": ai_analysis.get("buy_time", ""),
+        "sell_time": ai_analysis.get("sell_time", ""),
+        "trading_style": ai_analysis.get("trading_style", "Intraday"),
+        "style_reason": ai_analysis.get("style_reason", "Default strategy."),
+        "risk_level": ai_analysis.get("risk_level", "Medium"),
         "sentiment": 0.72
     }
     return response
+
+# ==========================================
+# 📰 REAL-TIME NEWS ENDPOINT
+# ==========================================
+from app.services.news_service import NewsService
+news_engine = NewsService()
+
+@app.get("/news")
+async def get_market_news():
+    try:
+        news_items = await asyncio.to_thread(news_engine.get_market_news)
+        return {"news": news_items, "timestamp": datetime.now().isoformat()}
+    except Exception as e:
+        print(f"[ERROR] News Error: {e}")
+        return {"news": [], "timestamp": datetime.now().isoformat()}
+
+# ==========================================
+# 📊 MARKET MOMENTUM ENDPOINT
+# ==========================================
+@app.get("/market-momentum")
+async def get_market_momentum():
+    try:
+        momentum = await asyncio.to_thread(news_engine.get_market_momentum)
+        return momentum
+    except Exception as e:
+        print(f"[ERROR] Momentum Error: {e}")
+        return {
+            "state": "NEUTRAL",
+            "momentum": "MODERATE",
+            "nifty_change": 0.0,
+            "summary": "Market data unavailable. Check back during trading hours.",
+            "strategy": "Wait for market to open for accurate signals."
+        }
 
 # ==========================================
 # 🔬 BACKTEST STRATEGY LAB ENDPOINT
@@ -173,8 +227,24 @@ async def run_backtest(symbol: str):
         report["symbol"] = symbol.upper()
         return report
     except Exception as e:
-        print(f"❌ Backtest Engine Error: {e}")
+        print(f"[ERROR] Backtest Engine Error: {e}")
         raise HTTPException(status_code=500, detail="Internal simulation error")
+
+# ==========================================
+# 🤖 AI CHAT TUTOR ENDPOINT
+# ==========================================
+from app.services.chat_agent import get_tutor_response
+
+@app.post("/chat")
+async def chat_endpoint(payload: dict):
+    try:
+        message = payload.get("message", "")
+        context = payload.get("context", "General Market Watchlist")
+        reply = await asyncio.to_thread(get_tutor_response, message, context)
+        return {"reply": reply}
+    except Exception as e:
+        print(f"[ERROR] Chat Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
 # ⚡ WEBSOCKET LIVE STREAM

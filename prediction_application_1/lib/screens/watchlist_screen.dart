@@ -46,8 +46,8 @@ class WatchlistScreen extends StatefulWidget {
 }
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
-  List<dynamic> stocks = [];
-  List<dynamic> filteredStocks = [];
+  List<Map<String, dynamic>> stocks = [];
+  List<Map<String, dynamic>> filteredStocks = [];
   bool isLoading = true;
   bool isSearching = false;
   Timer? _refreshTimer;
@@ -92,9 +92,12 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     if (!mounted) return;
     setState(() {
       isSearching = query.isNotEmpty || FocusScope.of(context).hasFocus;
-      filteredStocks = query.isEmpty 
-          ? _preCalculatedSuggestions 
-          : _preCalculatedSuggestions.where((s) => s['symbol'].toLowerCase().contains(query.toLowerCase())).toList();
+      filteredStocks = query.isEmpty
+          ? _preCalculatedSuggestions.cast<Map<String, dynamic>>()
+          : _preCalculatedSuggestions
+              .cast<Map<String, dynamic>>()
+              .where((s) => (s['symbol'] ?? '').toString().toLowerCase().contains(query.toLowerCase()))
+              .toList();
     });
   }
 
@@ -103,7 +106,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     if (!isSilent) setState(() => isLoading = true);
     try {
       final data = await ApiService().getWatchlistOverview();
-      if (mounted) setState(() { stocks = data; filteredStocks = data; isLoading = false; });
+      if (mounted) {
+        setState(() {
+          stocks = data;
+          filteredStocks = data;
+          isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint("❌ Watchlist Sync Error: $e");
       if (mounted && !isSilent) setState(() => isLoading = false);
@@ -279,6 +288,14 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     itemBuilder: (context, i) => _buildStockCard(filteredStocks[i]),
   );
 
+  // Safe key access helpers
+  String _sym(Map<String, dynamic> s)    => (s['symbol'] ?? s['ticker'] ?? '?').toString();
+  String _signal(Map<String, dynamic> s) => (s['signal'] ?? s['action'] ?? 'VIEW').toString();
+  String _price(Map<String, dynamic> s)  {
+    final v = s['price'] ?? s['current_price'] ?? s['ltp'] ?? 0;
+    return v is num ? v.toStringAsFixed(2) : v.toString();
+  }
+
   Widget _buildSearchBox() => Padding(
     padding: const EdgeInsets.fromLTRB(20, 5, 20, 15),
     child: TextField(
@@ -289,19 +306,54 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     ),
   );
 
-  Widget _buildStockCard(dynamic s) {
-    final bool isSuggestion = s['signal'] == 'VIEW';
+  Widget _buildStockCard(Map<String, dynamic> s) {
+    final symbol     = _sym(s);
+    final signal     = _signal(s);
+    final priceLabel = _price(s);
+    final isBuy      = signal == 'BUY';
+    final isSuggestion = signal == 'VIEW';
+
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => StockPredictionScreen(symbol: s['symbol']))),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => StockPredictionScreen(symbol: symbol)),
+      ),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(color: isSuggestion ? Colors.black : const Color(0xFF0D0D0D), borderRadius: BorderRadius.circular(24), border: Border.all(color: s['signal'] == 'BUY' ? const Color(0xFF00FFA3).withOpacity(0.15) : Colors.white10)),
+        decoration: BoxDecoration(
+          color: isSuggestion ? Colors.black : const Color(0xFF0D0D0D),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isBuy ? const Color(0xFF00FFA3).withOpacity(0.15) : Colors.white10,
+          ),
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(s['symbol'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text("₹${s['price']}", style: const TextStyle(color: Colors.white38, fontSize: 11))]),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: s['signal'] == 'BUY' ? const Color(0x1A00FFA3) : Colors.white10, borderRadius: BorderRadius.circular(8)), child: Text(s['signal'], style: TextStyle(color: s['signal'] == 'BUY' ? const Color(0xFF00FFA3) : Colors.white60, fontSize: 10, fontWeight: FontWeight.bold))),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(symbol, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text('₹$priceLabel', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isBuy ? const Color(0x1A00FFA3) : Colors.white10,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                signal,
+                style: TextStyle(
+                  color: isBuy ? const Color(0xFF00FFA3) : Colors.white60,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ],
         ),
       ),

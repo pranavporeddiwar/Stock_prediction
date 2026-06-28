@@ -10,6 +10,7 @@ import 'investment_helper_page.dart';
 import '../utils/app_state.dart'; 
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/global_chat_bot.dart';
+import '../widgets/stock_chart.dart';
 
 // --- DATA MODELS ---
 class ChartNode {
@@ -45,12 +46,14 @@ class StockPredictionScreen extends StatefulWidget {
 class _StockPredictionScreenState extends State<StockPredictionScreen> {
   StockData? data;
   bool isLoading = true;
+  String? _errorMessage;
   
   final LiveStreamService _streamService = LiveStreamService();
   StreamSubscription? _streamSubscription;
   late TrackballBehavior _trackballBehavior;
+  Timer? _autoRefreshTimer; // 1-minute auto-refresh for latest candle forecast
 
-  // Theme Colors matching mockup exactly
+  // Theme Colors
   final Color bgDark = const Color(0xFF0F1219);
   final Color cardDark = const Color(0xFF161A23);
   final Color neonGreen = const Color(0xFF22D372);
@@ -71,44 +74,140 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       lineColor: Colors.white24,
     );
     _startLiveStream();
+    // Start 1-minute auto-refresh for latest candle forecast
+    _autoRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      _refreshForecast();
+    });
+  }
+
+  StockData _normalizeStockData(StockData data) {
+    if (data.history.isEmpty || data.predictedPath.isEmpty) return data;
+    
+    double lastRealClose = data.currentPrice > 0 ? data.currentPrice : data.history.last.close;
+    double rawBase = data.predictedPath.first.close;
+    double offset = lastRealClose - rawBase;
+    
+    // Limit history to 25 candles for a zoomed-in, beautiful view
+    List<CandleModel> trimmedHistory = data.history.length > 25 
+        ? data.history.sublist(data.history.length - 25) 
+        : data.history;
+    
+    // Limit predictions to 6-8 candles
+    List<CandleModel> trimmedFuture = data.predictedPath.length > 8 
+        ? data.predictedPath.sublist(0, 8) 
+        : data.predictedPath;
+        
+    List<CandleModel> newPath = trimmedFuture.map((p) => CandleModel(
+      time: p.time,
+      open: p.open + offset,
+      high: p.high + offset,
+      low: p.low + offset,
+      close: p.close + offset,
+      volume: p.volume,
+      pattern: p.pattern,
+      risk: p.risk,
+    )).toList();
+    
+    // Derive target & stop loss from the NORMALIZED predicted candles
+    // so they stay within the visible chart range
+    double maxPredictedClose = newPath.fold(newPath.first.close, (m, c) => c.close > m ? c.close : m);
+    double minPredictedLow = newPath.fold(newPath.first.low, (m, c) => c.low < m ? c.low : m);
+    double newTarget = maxPredictedClose;
+    double newStopLoss = minPredictedLow;
+    
+    return StockData(
+      symbol: data.symbol,
+      currentPrice: data.currentPrice,
+      history: trimmedHistory,
+      predictedPath: newPath,
+      sentiment: data.sentiment,
+      suitability: data.suitability,
+      action: data.action,
+      reasoning: data.reasoning,
+      stopLoss: newStopLoss,
+      targetPrice: newTarget,
+      buyTime: data.buyTime,
+      sellTime: data.sellTime,
+      tradingStyle: data.tradingStyle,
+      styleReason: data.styleReason,
+      riskLevel: data.riskLevel,
+      rsi: data.rsi,
+      trendLogic: data.trendLogic,
+    );
+  }
+
+  void _refreshForecast() async {
+    if (!mounted) return;
+    try {
+      final freshData = await ApiService().fetchPrediction(widget.symbol, "intraday");
+      if (mounted && freshData.history.isNotEmpty) {
+        setState(() => data = _normalizeStockData(freshData));
+      }
+    } catch (_) {
+      // Silent refresh — don't disrupt the user
+    }
   }
 
   void _startLiveStream() async {
     if (!mounted) return;
-    setState(() => isLoading = true);
+    setState(() { isLoading = true; _errorMessage = null; });
     
     try {
       final initialData = await ApiService().fetchPrediction(widget.symbol, "intraday");
-      if (mounted) setState(() { data = initialData; isLoading = false; });
+      if (!mounted) return;
+      setState(() { data = _normalizeStockData(initialData); isLoading = false; });
     } catch (e) {
-      if (mounted) setState(() => isLoading = false);
+      if (!mounted) return;
+      // Extract the meaningful part of the error message
+      String errMsg = e.toString().replaceAll('Exception: ', '');
+      setState(() { isLoading = false; _errorMessage = errMsg; });
       return; 
     }
 
-    _streamSubscription = _streamService.connectToLiveStream(widget.symbol).listen((liveData) {
-      if (mounted && data != null) {
+    _streamSubscription = _streamService.connectToLiveStream(widget.symbol).listen(
+      (liveData) {
+        if (!mounted || data == null) return;
         setState(() {
+          // ⚡ ONLY update the live price, RSI, and trend from the stream.
+          // Preserve the original rich history & predicted path from the
+          // initial API call so the chart doesn't squeeze/collapse.
           data = StockData(
-            symbol: data!.symbol, currentPrice: liveData.currentPrice,
-            history: liveData.history, predictedPath: liveData.predictedPath,
-            sentiment: data!.sentiment, suitability: data!.suitability,
-            action: data!.action, reasoning: data!.reasoning, 
-            stopLoss: data!.stopLoss, targetPrice: data!.targetPrice,
-            rsi: liveData.rsi, trendLogic: liveData.trendLogic,
+            symbol: data!.symbol,
+            currentPrice: liveData.currentPrice,
+            history: data!.history,
+            predictedPath: data!.predictedPath,
+            sentiment: data!.sentiment,
+            suitability: data!.suitability,
+            action: data!.action,
+            reasoning: data!.reasoning, 
+            stopLoss: data!.stopLoss,
+            targetPrice: data!.targetPrice,
+            buyTime: data!.buyTime,
+            sellTime: data!.sellTime,
+            tradingStyle: data!.tradingStyle,
+            styleReason: data!.styleReason,
+            riskLevel: data!.riskLevel,
+            rsi: liveData.rsi,
+            trendLogic: liveData.trendLogic,
           );
         });
-      }
-    });
+      },
+      onError: (e) {
+        debugPrint("⚠️ Live stream error: $e");
+      },
+      cancelOnError: false,
+    );
   }
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _streamSubscription?.cancel();
+    _streamSubscription = null;
     _streamService.disconnect();
     super.dispose();
   }
 
-  // Helper to safely build future OHLC data if backend only sends Close prices
   List<ChartNode> _buildForecastNodes(DateTime cutoffTime, double lastClose) {
     List<ChartNode> nodes = [];
     Random rand = Random(42); 
@@ -117,27 +216,187 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       DateTime time = cutoffTime.add(Duration(minutes: 15 * (i + 1)));
       var c = data!.predictedPath[i];
       
-      // If your backend isn't sending OHLC for predictions yet, we simulate standard wicks
       double pClose = c.close;
       double pOpen = i == 0 ? lastClose : data!.predictedPath[i - 1].close;
-      double variance = pClose * 0.002; // 0.2% variance for wicks
+      double variance = pClose * 0.002; 
       double pHigh = max(pOpen, pClose) + (rand.nextDouble() * variance);
       double pLow = min(pOpen, pClose) - (rand.nextDouble() * variance);
 
-      // Simulate pattern assignment if missing
-      String pattern = i == 0 ? "Hammer" : (i == 1 ? "Bull Engulf" : (i == 2 ? "Marubozu" : "Doji"));
-      String risk = i < 2 ? "Low risk" : (i < 4 ? "Med risk" : "High risk");
-
       nodes.add(ChartNode(
         time: time, open: pOpen, high: pHigh, low: pLow, close: pClose, 
-        isPredicted: true, pattern: pattern, risk: risk
+        isPredicted: true, pattern: c.pattern ?? "Standard", risk: c.risk ?? "Low risk"
       ));
     }
     return nodes;
   }
 
+  // ==========================================
+  // ⚠️ ERROR STATE WITH MARKET-CLOSED DETECTION & RETRY
+  // ==========================================
+  bool _isMarketClosed() {
+    final now = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30)); // IST
+    final weekday = now.weekday; // 1=Mon ... 7=Sun
+    if (weekday == 6 || weekday == 7) return true; // Weekend
+    final minutes = now.hour * 60 + now.minute;
+    // NSE trading hours: 9:15 AM to 3:30 PM IST
+    return minutes < 555 || minutes > 930; // 555 = 9:15, 930 = 15:30
+  }
+
+  Widget _buildErrorScreen() {
+    final bool marketClosed = false; // _isMarketClosed(); bypassed for testing
+    
+    // Pick the right icon, title, and message based on context
+    final IconData icon;
+    final String title;
+    final String subtitle;
+    final Color accentColor;
+
+    if (marketClosed) {
+      icon = Icons.nightlight_round;
+      title = "MARKET CLOSED";
+      subtitle = "NSE trading hours: Mon–Fri, 9:15 AM – 3:30 PM IST.\nData will refresh when markets reopen.";
+      accentColor = const Color(0xFFFFC107);
+    } else if (_errorMessage != null && _errorMessage!.contains("503")) {
+      icon = Icons.cloud_off_rounded;
+      title = "BROKER OFFLINE";
+      subtitle = "The data broker session has expired.\nThe server is attempting to reconnect.";
+      accentColor = Colors.orangeAccent;
+    } else if (_errorMessage != null && _errorMessage!.contains("not found")) {
+      icon = Icons.search_off_rounded;
+      title = "SYMBOL NOT FOUND";
+      subtitle = "'${widget.symbol}' was not found in NSE listings.\nPlease check the ticker symbol.";
+      accentColor = Colors.redAccent;
+    } else {
+      icon = Icons.wifi_off_rounded;
+      title = "DATA UNAVAILABLE";
+      subtitle = _errorMessage ?? "Unable to fetch market data.\nPlease check your connection and retry.";
+      accentColor = Colors.redAccent;
+    }
+
+    return Scaffold(
+      backgroundColor: bgDark,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white54),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Glowing icon container
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accentColor.withOpacity(0.08),
+                  border: Border.all(color: accentColor.withOpacity(0.2)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accentColor.withOpacity(0.15),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: Icon(icon, color: accentColor, size: 36),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                title,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 13,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 36),
+              // Retry button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _startLiveStream,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text("RETRY CONNECTION", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accentColor.withOpacity(0.12),
+                    foregroundColor: accentColor,
+                    side: BorderSide(color: accentColor.withOpacity(0.25)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              // Go back button
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text("← BACK TO WATCHLIST", style: TextStyle(color: Colors.white24, fontSize: 11, letterSpacing: 1)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return Scaffold(backgroundColor: bgDark, body: Center(child: CircularProgressIndicator(color: neonGreen)));
+    }
+    if (data == null || data!.history.isEmpty) {
+      return _buildErrorScreen();
+    }
+
+    // ⚡ PRE-CALCULATE ALL DATA NODES ONCE FOR PERFECT SYNCHRONIZATION
+    List<ChartNode> historyNodes = [];
+    // Use a fixed market-session anchor: today at 09:15 IST
+    final now = DateTime.now();
+    // Anchor the history so the last candle ends at ~current time
+    final DateTime lastCandleTime = DateTime(now.year, now.month, now.day, now.hour,
+        (now.minute ~/ 15) * 15); // Round down to nearest 15 min
+
+    for (int i = 0; i < data!.history.length; i++) {
+      // Spread candles backwards from lastCandleTime
+      DateTime time = lastCandleTime.subtract(Duration(minutes: 15 * (data!.history.length - 1 - i)));
+      var c = data!.history[i];
+      // Use currentPrice as fallback but ensure we have at least a tiny OHLC spread
+      double close = c.close > 0 ? c.close : data!.currentPrice;
+      double open = c.open > 0 ? c.open : close;
+      double high = c.high > 0 ? c.high : (close > open ? close : open) * 1.001;
+      double low = c.low > 0 ? c.low : (close < open ? close : open) * 0.999;
+      historyNodes.add(ChartNode(time: time, open: open, high: high, low: low, close: close));
+    }
+
+    DateTime cutoffTime = historyNodes.isNotEmpty ? historyNodes.last.time : lastCandleTime;
+    double lastClose = historyNodes.isNotEmpty ? historyNodes.last.close : data!.currentPrice;
+    
+    List<ChartNode> forecastNodes = _buildForecastNodes(cutoffTime, lastClose);
+
+    // ⚡ MATHEMATICAL SEARCH: Find Exact Execution Times based on highest and lowest future prices
+    ChartNode? bestBuyNode;
+    ChartNode? bestSellNode;
+    if (forecastNodes.isNotEmpty) {
+      bestBuyNode = forecastNodes.reduce((curr, next) => curr.close < next.close ? curr : next);
+      bestSellNode = forecastNodes.reduce((curr, next) => curr.close > next.close ? curr : next);
+    }
+
     return Scaffold(
       backgroundColor: bgDark,
       extendBody: true, 
@@ -160,23 +419,22 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
           IconButton(icon: const Icon(Icons.notifications_none, color: Colors.white54, size: 20), onPressed: () {}),
         ],
       ),
-      body: isLoading 
-          ? Center(child: CircularProgressIndicator(color: neonGreen))
-          : (data == null || data!.history.isEmpty) 
-              ? const Center(child: Text("Data Offline", style: TextStyle(color: Colors.white54)))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 100), 
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeaderPrice(),
-                      _buildChartSection(),
-                      _buildImmediatePredictionCard(),
-                      _buildConfidenceAndActionCards(),
-                      _buildUpcomingForecastList(),
-                    ],
-                  ),
-                ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 100), 
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeaderPrice(),
+            _buildChartSection(historyNodes, forecastNodes, cutoffTime, bestBuyNode, bestSellNode),
+            _buildBuySellSignalCard(),
+            _buildTradingStyleCard(),
+            _buildImmediatePredictionCard(forecastNodes),
+            _buildConfidenceAndActionCards(bestBuyNode, bestSellNode),
+            _buildUpcomingForecastList(forecastNodes, bestBuyNode, bestSellNode),
+            _buildAiBotLink(),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF7B2CBF),
         onPressed: () => GlobalChatBot.show(context),
@@ -212,7 +470,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          // Timeframe Selector Chips
           Row(
             children: ['1D', '1W', '1M', '3M', '1Y', '5Y'].map((t) => Container(
               margin: const EdgeInsets.only(right: 8),
@@ -230,175 +487,30 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     );
   }
 
-Widget _buildChartSection() {
-    List<ChartNode> historyNodes = [];
-    DateTime currentTime = DateTime.now();
-
-    // Map Historical Data
-    for (int i = 0; i < data!.history.length; i++) {
-      DateTime time = currentTime.subtract(Duration(minutes: 15 * (data!.history.length - 1 - i)));
-      var c = data!.history[i];
-      // ⚡ Safety Check: If open is 0 (mapping error), fallback to current price
-      double open = c.open > 0 ? c.open : data!.currentPrice;
-      double high = c.high > 0 ? c.high : data!.currentPrice;
-      double low = c.low > 0 ? c.low : data!.currentPrice;
-      double close = c.close > 0 ? c.close : data!.currentPrice;
-      
-      historyNodes.add(ChartNode(time: time, open: open, high: high, low: low, close: close));
-    }
-
-    DateTime cutoffTime = historyNodes.isNotEmpty ? historyNodes.last.time : currentTime;
-    double lastClose = historyNodes.isNotEmpty ? historyNodes.last.close : data!.currentPrice;
-    
-    // Generate/Map Predicted Data
-    List<ChartNode> forecastNodes = _buildForecastNodes(cutoffTime, lastClose);
-
-    // ⚡ SMART ZOOM ALGORITHM: Find the absolute highest and lowest visible points
-    double minPrice = data!.currentPrice;
-    double maxPrice = data!.currentPrice;
-
-    for (var node in historyNodes) {
-      if (node.low > 0 && node.low < minPrice) minPrice = node.low;
-      if (node.high > maxPrice) maxPrice = node.high;
-    }
-    for (var node in forecastNodes) {
-      if (node.low > 0 && node.low < minPrice) minPrice = node.low;
-      if (node.high > maxPrice) maxPrice = node.high;
-    }
-    
-    // Ensure the Target and Stop Loss lines fit on the screen too
-    if (data!.targetPrice > maxPrice) maxPrice = data!.targetPrice;
-    if (data!.targetPrice > 0 && data!.targetPrice < minPrice) minPrice = data!.targetPrice;
-
-    // Add 0.2% visual padding to the top and bottom so candles don't touch the edges
-    minPrice = minPrice * 0.998;
-    maxPrice = maxPrice * 1.002;
-
+  Widget _buildChartSection(List<ChartNode> historyNodes, List<ChartNode> forecastNodes, DateTime cutoffTime, ChartNode? bestBuy, ChartNode? bestSell) {
     return Column(
       children: [
         SizedBox(
-          height: 320,
-          child: SfCartesianChart(
-            margin: const EdgeInsets.fromLTRB(10, 20, 10, 10),
-            plotAreaBorderWidth: 0,
-            trackballBehavior: _trackballBehavior,
-            
-            annotations: <CartesianChartAnnotation>[
-              CartesianChartAnnotation(
-                widget: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: const Color(0xFF2B3139), borderRadius: BorderRadius.circular(4)),
-                  child: const Text('AI →', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                ),
-                coordinateUnit: CoordinateUnit.point,
-                x: cutoffTime,
-                y: maxPrice * 0.995, // Anchor near top
-              ),
-              CartesianChartAnnotation(
-                widget: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: neonRed, borderRadius: BorderRadius.circular(4)),
-                  child: Text('SELL ${data!.targetPrice.toStringAsFixed(1)}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                ),
-                coordinateUnit: CoordinateUnit.point,
-                x: cutoffTime,
-                y: data!.targetPrice,
-              ),
-              CartesianChartAnnotation(
-                widget: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: neonGreen, borderRadius: BorderRadius.circular(4)),
-                  child: Text('BUY ${data!.currentPrice.toStringAsFixed(1)}', style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold)),
-                ),
-                coordinateUnit: CoordinateUnit.point,
-                x: cutoffTime,
-                y: data!.targetPrice * 0.98,
-              ),
-            ],
-            
-            primaryXAxis: DateTimeAxis(
-              dateFormat: DateFormat('HH:mm'),
-              intervalType: DateTimeIntervalType.hours, // ⚡ Cleans up overlapping time labels
-              majorGridLines: const MajorGridLines(width: 0),
-              labelStyle: const TextStyle(color: Colors.white54, fontSize: 10),
-              plotBands: <PlotBand>[
-                PlotBand(
-                  isVisible: true,
-                  start: cutoffTime, 
-                  end: cutoffTime,
-                  borderColor: const Color(0xFF2B3139), 
-                  borderWidth: 2, 
-                  dashArray: const <double>[5, 5],
-                )
-              ],
+          height: 360,
+          child: CustomPaint(
+            painter: CandleChartPainter(
+              candles: data!.history,
+              futureData: data!.predictedPath,
+              aiTargetPrice: data!.targetPrice,
+              suggestedBuyPrice: bestBuy?.close,
+              suggestedSellPrice: bestSell?.close,
+              stopLoss: data!.stopLoss,
+              bullColor: neonGreen,
+              bearColor: neonRed,
+              gridColor: const Color(0xFF1E222D),
+              textColor: Colors.white54,
+              priceTagColor: neonGreen,
+              aiLineColor: const Color(0xFF2962FF),
             ),
-            primaryYAxis: NumericAxis(
-              minimum: minPrice, // ⚡ FORCES ZOOM TO ACTUAL CANDLES
-              maximum: maxPrice, // ⚡ FORCES ZOOM TO ACTUAL CANDLES
-              opposedPosition: true, 
-              isVisible: true,
-              labelStyle: const TextStyle(color: Colors.white54, fontSize: 10),
-              axisLine: const AxisLine(width: 0), 
-              majorGridLines: const MajorGridLines(color: Colors.white10, width: 1, dashArray: <double>[4, 4]),
-              plotBands: <PlotBand>[
-                PlotBand(
-                  isVisible: true,
-                  start: data!.targetPrice, end: data!.targetPrice,
-                  borderColor: neonRed, borderWidth: 1, dashArray: const <double>[4, 4],
-                ),
-                PlotBand(
-                  isVisible: true,
-                  start: data!.targetPrice * 0.98, end: data!.targetPrice * 0.98,
-                  borderColor: neonGreen, borderWidth: 1, dashArray: const <double>[4, 4],
-                )
-              ],
-            ),
-            series: <CartesianSeries>[
-              // HISTORICAL SOLID CANDLES
-              CandleSeries<ChartNode, DateTime>(
-                dataSource: historyNodes, xValueMapper: (n, _) => n.time,
-                lowValueMapper: (n, _) => n.low, highValueMapper: (n, _) => n.high,
-                openValueMapper: (n, _) => n.open, closeValueMapper: (n, _) => n.close,
-                bullColor: neonGreen, bearColor: neonRed,
-                enableSolidCandles: true,
-              ),
-              // FUTURE DASHED HOLLOW CANDLES
-              CandleSeries<ChartNode, DateTime>(
-                dataSource: forecastNodes, xValueMapper: (n, _) => n.time,
-                lowValueMapper: (n, _) => n.low, highValueMapper: (n, _) => n.high,
-                openValueMapper: (n, _) => n.open, closeValueMapper: (n, _) => n.close,
-                bullColor: Colors.transparent, bearColor: Colors.transparent,
-                borderWidth: 2, dashArray: const <double>[3, 3],
-                pointColorMapper: (n, _) => n.close >= n.open ? neonGreen : neonRed,
-              ),
-              // EXECUTION MARKER (BUY BUBBLE)
-              if (historyNodes.isNotEmpty)
-                ScatterSeries<ChartNode, DateTime>(
-                  dataSource: [historyNodes.last], xValueMapper: (n, _) => n.time, yValueMapper: (n, _) => n.low * 0.999,
-                  markerSettings: MarkerSettings(shape: DataMarkerType.circle, color: neonGreen, height: 22, width: 22),
-                  dataLabelMapper: (ChartNode n, _) => "B",
-                  dataLabelSettings: const DataLabelSettings(
-                    isVisible: true,
-                    textStyle: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold),
-                    labelAlignment: ChartDataLabelAlignment.middle,
-                  ),
-                ),
-              // EXECUTION MARKER (SELL BUBBLE)
-              if (forecastNodes.length > 3)
-                ScatterSeries<ChartNode, DateTime>(
-                  dataSource: [forecastNodes[2]], xValueMapper: (n, _) => n.time, yValueMapper: (n, _) => n.high * 1.001,
-                  markerSettings: MarkerSettings(shape: DataMarkerType.circle, color: neonRed, height: 22, width: 22),
-                  dataLabelMapper: (ChartNode n, _) => "S",
-                  dataLabelSettings: const DataLabelSettings(
-                    isVisible: true,
-                    textStyle: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                    labelAlignment: ChartDataLabelAlignment.middle,
-                  ),
-                ),
-            ],
+            child: const SizedBox.expand(),
           ),
         ),
-        // Legend below chart
+        const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -406,14 +518,14 @@ Widget _buildChartSection() {
             const SizedBox(width: 15),
             _buildLegendDot(neonRed, "Bearish"),
             const SizedBox(width: 15),
-            _buildLegendDot(Colors.transparent, "Predicted", borderColor: neonGreen, isDashed: true),
+            _buildLegendDot(Colors.transparent, "Predicted", borderColor: const Color(0xFF2962FF)),
           ],
-        )
+        ),
       ],
     );
   }
 
-  Widget _buildLegendDot(Color color, String label, {Color? borderColor, bool isDashed = false}) {
+  Widget _buildLegendDot(Color color, String label, {Color? borderColor}) {
     return Row(
       children: [
         Container(
@@ -429,10 +541,9 @@ Widget _buildChartSection() {
     );
   }
 
-  Widget _buildImmediatePredictionCard() {
-    if (data!.predictedPath.isEmpty) return const SizedBox.shrink();
-    
-    ChartNode firstFuture = _buildForecastNodes(DateTime.now(), data!.currentPrice).first;
+  Widget _buildImmediatePredictionCard(List<ChartNode> forecastNodes) {
+    if (forecastNodes.isEmpty) return const SizedBox.shrink();
+    ChartNode firstFuture = forecastNodes.first;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 25, 20, 0),
@@ -495,7 +606,7 @@ Widget _buildChartSection() {
     );
   }
 
-  Widget _buildConfidenceAndActionCards() {
+  Widget _buildConfidenceAndActionCards(ChartNode? bestBuy, ChartNode? bestSell) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       child: Column(
@@ -519,6 +630,7 @@ Widget _buildChartSection() {
           const SizedBox(height: 20),
           Row(
             children: [
+              // ⚡ BEST BUY CARD (Dynamically Synced to AI Path)
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(15),
@@ -538,16 +650,18 @@ Widget _buildChartSection() {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text("₹${data!.currentPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                      Text("₹${bestBuy?.close.toStringAsFixed(2) ?? data!.currentPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      Text("Today • ${DateFormat('HH:mm a').format(DateTime.now())}", style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                      Text("Today • ${bestBuy != null ? DateFormat('hh:mm a').format(bestBuy.time) : '--:--'}", style: const TextStyle(color: Colors.white54, fontSize: 10)),
                       const SizedBox(height: 4),
-                      const Text("Hammer + vol spike", style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      Text(bestBuy?.pattern ?? "Analyzing...", style: const TextStyle(color: Colors.white70, fontSize: 11)),
                     ],
                   ),
                 ),
               ),
               const SizedBox(width: 12),
+              
+              // ⚡ BEST SELL CARD (Dynamically Synced to AI Path)
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(15),
@@ -567,11 +681,11 @@ Widget _buildChartSection() {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text("₹${data!.targetPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                      Text("₹${bestSell?.close.toStringAsFixed(2) ?? data!.targetPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      Text("Today • ${DateFormat('HH:mm a').format(DateTime.now().add(const Duration(hours: 1)))}", style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                      Text("Today • ${bestSell != null ? DateFormat('hh:mm a').format(bestSell.time) : '--:--'}", style: const TextStyle(color: Colors.white54, fontSize: 10)),
                       const SizedBox(height: 4),
-                      const Text("Shooting Star reversal", style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      Text(bestSell?.pattern ?? "Analyzing...", style: const TextStyle(color: Colors.white70, fontSize: 11)),
                     ],
                   ),
                 ),
@@ -583,8 +697,7 @@ Widget _buildChartSection() {
     );
   }
 
-  Widget _buildUpcomingForecastList() {
-    List<ChartNode> forecastNodes = _buildForecastNodes(DateTime.now(), data!.currentPrice);
+  Widget _buildUpcomingForecastList(List<ChartNode> forecastNodes, ChartNode? bestBuy, ChartNode? bestSell) {
     if (forecastNodes.isEmpty) return const SizedBox.shrink();
 
     return Padding(
@@ -609,8 +722,12 @@ Widget _buildChartSection() {
             itemCount: forecastNodes.length > 5 ? 5 : forecastNodes.length,
             itemBuilder: (context, index) {
               ChartNode node = forecastNodes[index];
-              Color riskColor = index < 2 ? neonGreen : (index < 4 ? Colors.orange : neonRed);
-              String actLabel = index == 0 ? "BUY" : (index == 3 ? "SELL" : "");
+              Color riskColor = node.risk.contains("Low") ? neonGreen : (node.risk.contains("Med") ? Colors.orange : neonRed);
+              
+              // ⚡ Dynamic tagging based on exact time sync
+              String actLabel = "";
+              if (node.time == bestBuy?.time) actLabel = "BUY";
+              if (node.time == bestSell?.time) actLabel = "SELL";
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -618,7 +735,7 @@ Widget _buildChartSection() {
                 decoration: BoxDecoration(
                   color: cardDark,
                   borderRadius: BorderRadius.circular(16),
-                  border: index == 0 ? Border.all(color: neonGreen.withOpacity(0.5)) : Border.all(color: Colors.white.withOpacity(0.05)),
+                  border: node.time == bestBuy?.time ? Border.all(color: neonGreen.withOpacity(0.5)) : Border.all(color: Colors.white.withOpacity(0.05)),
                 ),
                 child: Row(
                   children: [
@@ -655,7 +772,7 @@ Widget _buildChartSection() {
                       decoration: BoxDecoration(color: riskColor.withOpacity(0.1), border: Border.all(color: riskColor.withOpacity(0.3)), borderRadius: BorderRadius.circular(12)),
                       child: Row(
                         children: [
-                          Icon(index < 2 ? Icons.shield_outlined : Icons.warning_amber_rounded, color: riskColor, size: 12),
+                          Icon(node.risk.contains("Low") ? Icons.shield_outlined : Icons.warning_amber_rounded, color: riskColor, size: 12),
                           const SizedBox(width: 4),
                           Text(node.risk, style: TextStyle(color: riskColor, fontSize: 10, fontWeight: FontWeight.bold)),
                         ],
@@ -667,6 +784,241 @@ Widget _buildChartSection() {
             },
           )
         ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // 📊 BUY/SELL SIGNAL CARD WITH TIMESTAMPS
+  // ==========================================
+  Widget _buildBuySellSignalCard() {
+    if (data == null) return const SizedBox.shrink();
+    
+    final action = data!.action;
+    final isBuy = action == "BUY";
+    final actionColor = isBuy ? neonGreen : (action == "SELL" ? neonRed : Colors.amber);
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: actionColor.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: actionColor.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: actionColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(action, style: TextStyle(color: isBuy ? Colors.black : Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ),
+              const SizedBox(width: 12),
+              Text("SIGNAL", style: TextStyle(color: actionColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text("Risk: ${data!.riskLevel}", style: TextStyle(color: data!.riskLevel == "Low" ? neonGreen : (data!.riskLevel == "High" ? neonRed : Colors.amber), fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Buy & Sell time row
+          Row(
+            children: [
+              Expanded(
+                child: _buildTimeBlock("BUY AT", data!.buyTime, neonGreen, Icons.arrow_downward_rounded),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildTimeBlock("SELL AT", data!.sellTime, neonRed, Icons.arrow_upward_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Target & Stop Loss row
+          Row(
+            children: [
+              Expanded(
+                child: _buildPriceChip("TARGET", data!.targetPrice, neonGreen),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildPriceChip("STOP LOSS", data!.stopLoss, neonRed),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // AI Reasoning
+          Text(data!.reasoning, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeBlock(String label, String time, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 14),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(time.isNotEmpty ? time : "Calculating...", style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPriceChip(String label, double price, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+          Text("₹${price.toStringAsFixed(2)}", style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // 🎯 TRADING STYLE RECOMMENDATION CARD
+  // ==========================================
+  Widget _buildTradingStyleCard() {
+    if (data == null) return const SizedBox.shrink();
+    
+    final style = data!.tradingStyle;
+    final IconData styleIcon;
+    final Color styleColor;
+    
+    switch (style) {
+      case "Scalping":
+        styleIcon = Icons.flash_on_rounded;
+        styleColor = Colors.orangeAccent;
+        break;
+      case "Intraday":
+        styleIcon = Icons.today_rounded;
+        styleColor = const Color(0xFF00BCD4);
+        break;
+      case "Swing":
+        styleIcon = Icons.trending_up_rounded;
+        styleColor = const Color(0xFF9D4EDD);
+        break;
+      case "Positional":
+        styleIcon = Icons.calendar_month_rounded;
+        styleColor = const Color(0xFF4CAF50);
+        break;
+      default:
+        styleIcon = Icons.auto_graph;
+        styleColor = Colors.white54;
+    }
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: styleColor.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: styleColor.withOpacity(0.15)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: styleColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(styleIcon, color: styleColor, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text("RECOMMENDED: ", style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1)),
+                    Text(style.toUpperCase(), style: TextStyle(color: styleColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(data!.styleReason, style: const TextStyle(color: Colors.white54, fontSize: 11, height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // 🤖 AI BOT LINK AT BOTTOM
+  // ==========================================
+  Widget _buildAiBotLink() {
+    return GestureDetector(
+      onTap: () => GlobalChatBot.show(context),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [const Color(0xFF7B2CBF).withOpacity(0.15), const Color(0xFF9D4EDD).withOpacity(0.08)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF9D4EDD).withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFF9D4EDD).withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.auto_awesome, color: Color(0xFF9D4EDD), size: 20),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Want deeper insights?", style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 2),
+                  Text("Ask our AI bot for detailed prediction analysis", style: TextStyle(color: Colors.white38, fontSize: 11)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF9D4EDD), size: 16),
+          ],
+        ),
       ),
     );
   }

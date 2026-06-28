@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'watchlist_screen.dart';
 import 'home_screen.dart'; 
-import 'portfolio_screen.dart'; // 🔄 Swapped out legacy journal imports cleanly
-import '../widgets/global_chat_bot.dart'; // 👈 Import your existing bot
+import 'portfolio_screen.dart';
+import 'profile_screen.dart';
+import '../widgets/global_chat_bot.dart';
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
@@ -16,10 +17,10 @@ class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
 
   final List<Widget> _pages = [
-    const WatchlistScreen(),
-    const HomeScreen(),
-    const PortfolioScreen(), // 🎯 Clean execution mounting index 2 target layout!
-    const Center(child: Text("User Profile Data", style: TextStyle(color: Colors.white))),
+    const HomeScreen(),             // Index 0 → Home tab
+    const WatchlistScreen(),        // Index 1 → Markets tab
+    const PortfolioScreen(),        // Index 2 → Portfolio tab
+    const ProfileScreen(),          // Index 3 → Profile tab
   ];
 
   @override

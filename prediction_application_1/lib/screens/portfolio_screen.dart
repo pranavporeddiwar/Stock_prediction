@@ -87,16 +87,49 @@ class PortfolioScreen extends StatelessWidget {
                           border: Border.all(color: Colors.white10),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(asset.symbol, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                                const SizedBox(height: 4),
-                                Text("${asset.quantity} Units @ ₹${asset.averageBuyPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                              ],
+                            // Alert Toggle Button
+                            GestureDetector(
+                              onTap: () => service.toggleAlert(asset.symbol),
+                              child: Container(
+                                width: 32, height: 32,
+                                margin: const EdgeInsets.only(right: 12),
+                                decoration: BoxDecoration(
+                                  color: service.isAlertEnabled(asset.symbol) 
+                                    ? const Color(0xFF00FFA3).withOpacity(0.15) 
+                                    : Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: service.isAlertEnabled(asset.symbol) 
+                                      ? const Color(0xFF00FFA3).withOpacity(0.4) 
+                                      : Colors.white10,
+                                  ),
+                                ),
+                                child: Icon(
+                                  service.isAlertEnabled(asset.symbol) 
+                                    ? Icons.notifications_active 
+                                    : Icons.notifications_off_outlined,
+                                  color: service.isAlertEnabled(asset.symbol) 
+                                    ? const Color(0xFF00FFA3) 
+                                    : Colors.white24,
+                                  size: 16,
+                                ),
+                              ),
                             ),
+                            // Stock Info
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(asset.symbol, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                                  const SizedBox(height: 4),
+                                  Text("${asset.quantity} Units @ ₹${asset.averageBuyPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                                  if (service.isAlertEnabled(asset.symbol))
+                                    const Text("Profit alerts ON", style: TextStyle(color: Color(0xFF00FFA3), fontSize: 8, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                            // Price & P&L
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
