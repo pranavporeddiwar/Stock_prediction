@@ -13,3 +13,5 @@ python-dotenv
 firebase-admin
 logzero
 websocket-client
+apscheduler
+pytz
