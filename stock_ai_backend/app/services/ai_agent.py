@@ -54,7 +54,7 @@ def get_hybrid_prediction(stock_symbol, ohlc_data, rsi_value, lstm_predictions):
     5. RISK LEVEL: "Low" if ATR < 1% of price, "Medium" if 1-2%, "High" if > 2%.
     6. CANDLESTICK TAGGING: Look at the sequence of forecasted prices. Assign a logical candlestick pattern and a risk level to EACH of those price steps.
     OUTPUT FORMAT (Strict JSON):
-    {
+    {{
         "action": "BUY" | "SELL" | "HOLD",
         "reasoning": "Simple explanation with EXACT execution date and time...",
         "target_price": float,
@@ -65,9 +65,9 @@ def get_hybrid_prediction(stock_symbol, ohlc_data, rsi_value, lstm_predictions):
         "style_reason": "Short explanation why this style suits this stock...",
         "risk_level": "Low" | "Medium" | "High",
         "enriched_forecast": [
-            { "close": float, "pattern": "string", "risk": "string"}
+            {{ "close": float, "pattern": "string", "risk": "string"}}
         ]
-    }
+    }}
     [/INST]
     """
     try:
