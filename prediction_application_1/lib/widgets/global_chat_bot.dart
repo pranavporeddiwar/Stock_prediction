@@ -193,16 +193,16 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
         final portfolio = Provider.of<PortfolioService>(context, listen: false);
         return {
           "type": "portfolio",
-          "total_invested": portfolio.totalInvested,
-          "current_value": portfolio.currentValue,
-          "total_pnl": portfolio.totalPnL,
-          "holdings_count": portfolio.holdings.length,
-          "holdings": portfolio.holdings.map((h) => {
+          "total_invested": portfolio.overallInvestment,
+          "current_value": portfolio.overallValue,
+          "total_pnl": portfolio.overallPnL,
+          "holdings_count": portfolio.ownedStocks.length,
+          "holdings": portfolio.ownedStocks.map((h) => {
             "symbol": h.symbol,
             "quantity": h.quantity,
-            "avg_price": h.averagePrice,
-            "current_price": h.currentPrice,
-            "pnl": (h.currentPrice - h.averagePrice) * h.quantity,
+            "avg_price": h.averageBuyPrice,
+            "current_price": h.currentLivePrice,
+            "pnl": h.totalProfitLoss,
           }).toList(),
         };
       } else if (contextString == "watchlist") {
