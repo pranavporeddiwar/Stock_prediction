@@ -93,6 +93,8 @@ watchlist_manager = WatchlistService(fetcher_instance=data_fetcher)
 # ==========================================
 # 🩺 CLOUD HEALTH CHECK
 # ==========================================
+@app.get("/")
+@app.head("/")
 @app.get("/health-check")
 async def health_check():
     broker_alive = await asyncio.to_thread(data_fetcher.is_session_alive)
