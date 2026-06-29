@@ -45,21 +45,43 @@ class DataFetcher:
 
             api = SmartConnect(api_key=api_key)
             totp_code = pyotp.TOTP(totp_secret).now()
+            
+            # Stagger TOTP usage slightly to avoid reusing the exact same token in the same window
+            time.sleep(1)
+            
             session = api.generateSession(client_id, pin, totp_code)
-            if session.get('status'):
+            if session and session.get('status'):
+                self._refresh_token_str = session['data']['refreshToken']
                 print("[OK] DataFetcher: Broker session established successfully.")
                 return api
             else:
-                print(f"[ERROR] DataFetcher: Session rejected: {session.get('message', 'Unknown')}")
+                print(f"[ERROR] DataFetcher: Session rejected: {session.get('message', 'Unknown') if session else 'None'}")
                 return None
         except Exception as e:
             print(f"[ERROR] DataFetcher: Login Exception: {e}")
             return None
 
     def _refresh_session(self):
-        """Re-authenticate with a fresh TOTP code. Thread-safe."""
+        """Re-authenticate with a fresh token. Thread-safe."""
         with self._lock:
             print("[REFRESH] DataFetcher: Refreshing broker session...")
+            
+            # 1. Try silent refresh using the refresh token
+            if getattr(self, '_refresh_token_str', None) and self.api:
+                try:
+                    res = self.api.generateToken(self._refresh_token_str)
+                    if res and res.get('status'):
+                        self._refresh_token_str = res['data']['refreshToken']
+                        self._last_auth_time = datetime.now()
+                        print("[OK] DataFetcher: Session renewed silently via refresh token.")
+                        return True
+                except Exception as e:
+                    print(f"[WARN] DataFetcher: Silent refresh failed: {e}")
+
+            # 2. Fallback to full login if silent refresh fails
+            # Wait for the next TOTP window (30s) if we are rapidly failing
+            print("[WARN] DataFetcher: Falling back to full TOTP login...")
+            time.sleep(2)
             self.api = self._init_session()
             self._last_auth_time = datetime.now() if self.api else None
             return self.api is not None
