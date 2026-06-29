@@ -9,6 +9,12 @@ from app.services.prediction_service import PredictionService
 from app.services.data_fetcher import DataFetcher
 import tensorflow as tf # ⚡ Imported for model compilation
 
+import sys
+import io
+
+# Fix for Windows console emoji printing
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 # --- 1. LOAD SECURE CREDENTIALS ---
 load_dotenv()
 
