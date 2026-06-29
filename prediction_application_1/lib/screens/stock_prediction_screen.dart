@@ -437,7 +437,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF7B2CBF),
-        onPressed: () => GlobalChatBot.show(context),
+        onPressed: () => GlobalChatBot.show(context, data: data),
         child: const Icon(Icons.auto_awesome, color: Colors.white),
       ),
     );
@@ -984,7 +984,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
   // ==========================================
   Widget _buildAiBotLink() {
     return GestureDetector(
-      onTap: () => GlobalChatBot.show(context),
+      onTap: () => GlobalChatBot.show(context, data: data),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),

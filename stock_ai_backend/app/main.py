@@ -150,7 +150,11 @@ async def chat_endpoint(payload: dict):
     try:
         message = payload.get("message", "")
         context = payload.get("context", "General Market Watchlist")
-        reply = await asyncio.to_thread(get_tutor_response, message, context)
+        history = payload.get("history", [])
+        prediction_data = payload.get("prediction_data", None)
+        reply = await asyncio.to_thread(
+            get_tutor_response, message, context, history, prediction_data
+        )
         return {"reply": reply}
     except Exception as e:
          raise HTTPException(status_code=500, detail=str(e))

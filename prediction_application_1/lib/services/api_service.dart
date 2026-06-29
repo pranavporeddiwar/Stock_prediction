@@ -97,19 +97,43 @@ class ApiService {
     return 0.0;
   }
 
-  /// Sends a user chat message alongside their precise reactive viewport context
+  /// Sends a user chat message alongside their precise reactive viewport context,
+  /// full conversation history, and structured prediction data
   /// straight to the unified FastAPI /chat endpoint.
-  Future<String> sendChatMessage(String message, String context) async {
+  Future<String> sendChatMessage(
+    String message,
+    String context, {
+    List<Map<String, String>>? history,
+    Map<String, dynamic>? predictionData,
+  }) async {
     final url = Uri.parse('$baseUrl/chat');
     
     try {
+      // Build the enriched payload with conversation history + prediction context
+      final Map<String, dynamic> payload = {
+        'message': message,
+        'context': context,
+      };
+
+      // Convert chat history into LLM-compatible format
+      if (history != null && history.isNotEmpty) {
+        payload['history'] = history.map((msg) {
+          return {
+            'role': msg['sender'] == 'user' ? 'user' : 'assistant',
+            'content': msg['text'] ?? '',
+          };
+        }).toList();
+      }
+
+      // Attach structured prediction data if available
+      if (predictionData != null) {
+        payload['prediction_data'] = predictionData;
+      }
+
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'message': message, 
-          'context': context
-        }),
+        body: jsonEncode(payload),
       );
 
       if (response.statusCode == 200) {
