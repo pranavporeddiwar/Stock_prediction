@@ -14,4 +14,4 @@ firebase-admin
 logzero
 websocket-client
 apscheduler
-pytz
+pytzyfinance
