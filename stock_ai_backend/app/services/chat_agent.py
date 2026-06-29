@@ -10,7 +10,8 @@ def get_tutor_response(
     user_message: str,
     app_context: str = "General Market Watchlist",
     history: list = None,
-    prediction_data: dict = None
+    prediction_data: dict = None,
+    page_data: dict = None
 ):
     """
     Indian-market-focused AI tutor with full conversation memory
@@ -66,6 +67,51 @@ def get_tutor_response(
     UPCOMING CANDLE FORECAST (15-min intervals):
 {forecast_text}
     ═══════════════════════════════════════════════
+    ═══════════════════════════════════════════════
+    """
+
+    # Build the page data block for the prompt if we are on a specific page
+    page_block = ""
+    if page_data:
+        p_type = page_data.get("type", "")
+        if p_type == "home":
+            momentum = page_data.get("momentum", {})
+            page_block = f"""
+    ═══════════════════════════════════════════════
+    📊 HOME SCREEN DATA:
+    ═══════════════════════════════════════════════
+    Market State: {momentum.get('state', 'Unknown')}
+    Nifty Change: {momentum.get('nifty_change', 0.0):.2f}%
+    Market Summary: {momentum.get('summary', '')}
+    ═══════════════════════════════════════════════
+    """
+        elif p_type == "portfolio":
+            holdings = page_data.get('holdings', [])
+            h_text = ""
+            for h in holdings:
+                h_text += f"      - {h.get('symbol', 'Unknown')}: {h.get('quantity', 0)} shares @ ₹{h.get('avg_price', 0):.2f} (CMP: ₹{h.get('current_price', 0):.2f}) -> PnL: ₹{h.get('pnl', 0):.2f}\n"
+            page_block = f"""
+    ═══════════════════════════════════════════════
+    💼 USER PORTFOLIO DATA:
+    ═══════════════════════════════════════════════
+    Total Invested: ₹{page_data.get('total_invested', 0):.2f}
+    Current Value: ₹{page_data.get('current_value', 0):.2f}
+    Total PnL: ₹{page_data.get('total_pnl', 0):.2f}
+    Holdings ({page_data.get('holdings_count', 0)}):
+{h_text}
+    ═══════════════════════════════════════════════
+    """
+        elif p_type == "watchlist":
+            items = page_data.get('items', [])
+            w_text = ""
+            for w in items:
+                w_text += f"      - {w.get('symbol', 'Unknown')}: ₹{w.get('price', 0):.2f} ({w.get('change_pct', 0):.2f}%) | Signal: {w.get('signal', 'VIEW')}\n"
+            page_block = f"""
+    ═══════════════════════════════════════════════
+    📋 USER WATCHLIST DATA:
+    ═══════════════════════════════════════════════
+{w_text}
+    ═══════════════════════════════════════════════
     """
 
     system_prompt = f"""
@@ -98,6 +144,7 @@ def get_tutor_response(
     ════════════════════════════════════════
     The user is currently viewing: [{app_context}]
     {prediction_block}
+    {page_block}
 
     ════════════════════════════════════════
     YOUR CAPABILITIES
@@ -113,13 +160,15 @@ def get_tutor_response(
     - How RSI indicates overbought/oversold conditions
     - Explaining the AI confidence score
     - Predicting the next few candles based on current momentum
-    - Any general Indian stock market concept or term
+    - The overall market momentum and news (if on Home screen)
+    - The user's portfolio P&L and holdings (if on Portfolio screen)
+    - The user's watchlist signals and performance (if on Watchlist screen)
 
     ════════════════════════════════════════
     STRICT BOUNDARIES (CRITICAL)
     ════════════════════════════════════════
-    1. If the user asks a question that is NOT related to the Indian stock market, investing, or the active prediction on the screen, you MUST REFUSE to answer.
-    2. Example response to off-topic questions: "I am a Neural Tutor focused exclusively on the Indian stock market. I cannot assist with [topic]. Please ask me about the active prediction or other market concepts."
+    1. If the user asks a question that is NOT related to the Indian stock market, their portfolio, their watchlist, or the active prediction on the screen, you MUST REFUSE to answer.
+    2. Example response to off-topic questions: "I am a Neural Tutor focused exclusively on the Indian stock market. I cannot assist with [topic]. Please ask me about the active prediction, your portfolio, or other market concepts."
     3. Do NOT provide the answer to off-topic questions even if you apologize first. Just refuse.
 
     ════════════════════════════════════════

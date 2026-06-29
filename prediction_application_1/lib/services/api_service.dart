@@ -105,6 +105,7 @@ class ApiService {
     String context, {
     List<Map<String, String>>? history,
     Map<String, dynamic>? predictionData,
+    Map<String, dynamic>? pageData,
   }) async {
     final url = Uri.parse('$baseUrl/chat');
     
@@ -128,6 +129,11 @@ class ApiService {
       // Attach structured prediction data if available
       if (predictionData != null) {
         payload['prediction_data'] = predictionData;
+      }
+
+      // Attach structured page data for context-aware bot
+      if (pageData != null) {
+        payload['page_data'] = pageData;
       }
 
       final response = await http.post(

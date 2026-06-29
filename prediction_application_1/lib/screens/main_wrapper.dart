@@ -5,6 +5,7 @@ import 'home_screen.dart';
 import 'portfolio_screen.dart';
 import 'profile_screen.dart';
 import '../widgets/global_chat_bot.dart';
+import '../utils/app_state.dart';
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
@@ -62,6 +63,16 @@ class _MainWrapperState extends State<MainWrapper> {
         onTap: (index) {
           setState(() {
             _currentIndex = index;
+            // Update the global context for the AI
+            if (index == 0) {
+              currentBotContext.value = "home";
+            } else if (index == 1) {
+              currentBotContext.value = "watchlist";
+            } else if (index == 2) {
+              currentBotContext.value = "portfolio";
+            } else if (index == 3) {
+              currentBotContext.value = "profile";
+            }
           });
         },
       ),

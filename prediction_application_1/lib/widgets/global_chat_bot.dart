@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../utils/app_state.dart';
 import '../models/stock_data.dart';
+import 'package:provider/provider.dart';
+import '../services/portfolio_service.dart';
 
 class GlobalChatBot extends StatefulWidget {
   final StockData? stockData;
@@ -176,6 +178,44 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
   }
 
   // ==========================================
+  // 📄 PAGE DATA CONTEXT GATHERER
+  // ==========================================
+  Future<Map<String, dynamic>?> _gatherPageData() async {
+    if (widget.stockData != null) return null; // Already have specific stock data
+
+    final contextString = currentBotContext.value;
+    try {
+      if (contextString == "home") {
+        final momentum = await ApiService().getMarketMomentum();
+        return {"type": "home", "momentum": momentum};
+      } else if (contextString == "portfolio") {
+        if (!mounted) return null;
+        final portfolio = Provider.of<PortfolioService>(context, listen: false);
+        return {
+          "type": "portfolio",
+          "total_invested": portfolio.totalInvested,
+          "current_value": portfolio.currentValue,
+          "total_pnl": portfolio.totalPnL,
+          "holdings_count": portfolio.holdings.length,
+          "holdings": portfolio.holdings.map((h) => {
+            "symbol": h.symbol,
+            "quantity": h.quantity,
+            "avg_price": h.averagePrice,
+            "current_price": h.currentPrice,
+            "pnl": (h.currentPrice - h.averagePrice) * h.quantity,
+          }).toList(),
+        };
+      } else if (contextString == "watchlist") {
+        final overview = await ApiService().getWatchlistOverview();
+        return {"type": "watchlist", "items": overview.take(10).toList()}; // Take top 10
+      }
+    } catch (e) {
+      debugPrint("Error gathering page data: \$e");
+    }
+    return null;
+  }
+
+  // ==========================================
   // 📨 SEND MESSAGE WITH FULL CONTEXT
   // ==========================================
   void _sendMessage() async {
@@ -192,12 +232,15 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
     _saveChatHistory(); // Persist the user message immediately
 
     try {
-      // ⚡ Send message with full conversation history + prediction data
+      // ⚡ Send message with full conversation history + prediction data + page data
+      final pageData = await _gatherPageData();
+      
       String reply = await ApiService().sendChatMessage(
         userMsg,
         currentBotContext.value,
         history: _messages,
         predictionData: _buildPredictionPayload(),
+        pageData: pageData,
       );
 
       if (mounted) {

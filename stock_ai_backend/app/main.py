@@ -152,8 +152,9 @@ async def chat_endpoint(payload: dict):
         context = payload.get("context", "General Market Watchlist")
         history = payload.get("history", [])
         prediction_data = payload.get("prediction_data", None)
+        page_data = payload.get("page_data", None)
         reply = await asyncio.to_thread(
-            get_tutor_response, message, context, history, prediction_data
+            get_tutor_response, message, context, history, prediction_data, page_data
         )
         return {"reply": reply}
     except Exception as e:
