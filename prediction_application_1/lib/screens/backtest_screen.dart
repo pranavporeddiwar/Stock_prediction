@@ -2,25 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../services/api_service.dart';
-
 class BacktestScreen extends StatefulWidget {
   final String symbol;
   const BacktestScreen({super.key, required this.symbol});
-
   @override
   State<BacktestScreen> createState() => _BacktestScreenState();
 }
-
 class _BacktestScreenState extends State<BacktestScreen> {
   Map<String, dynamic>? report;
   bool isLoading = true;
-
   @override
   void initState() {
     super.initState();
     _runBacktest();
   }
-
   Future<void> _runBacktest() async {
     try {
       final res = await http.get(Uri.parse("${ApiService.baseUrl}/backtest/${widget.symbol}"));
@@ -29,13 +24,12 @@ class _BacktestScreenState extends State<BacktestScreen> {
       if (mounted) setState(() => isLoading = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(title: Text("${widget.symbol} STRATEGY LAB"), backgroundColor: Colors.black),
-      body: isLoading 
+      body: isLoading
         ? const Center(child: CircularProgressIndicator(color: Color(0xFF00FFA3)))
         : Column(
             children: [
@@ -54,7 +48,6 @@ class _BacktestScreenState extends State<BacktestScreen> {
           ),
     );
   }
-
   Widget _buildMetricCard(String label, String value) => Container(
     padding: const EdgeInsets.all(20),
     margin: const EdgeInsets.all(10),

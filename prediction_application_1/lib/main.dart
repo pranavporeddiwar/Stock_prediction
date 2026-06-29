@@ -1,55 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:provider/provider.dart'; // 📦 Injected State Manager
-import 'package:firebase_auth/firebase_auth.dart'; // 🔐 Injected Native Auth Engine
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
-import 'screens/main_wrapper.dart'; 
-import 'screens/auth_screen.dart'; // 🎛️ Injected Login Portal Terminal
-import 'services/portfolio_service.dart'; // 📈 Injected Live Portfolio Engine
-import 'services/auth_service.dart'; // 🛡️ Injected Reactive Security Brain
-
+import 'screens/main_wrapper.dart';
+import 'screens/auth_screen.dart';
+import 'services/portfolio_service.dart';
+import 'services/auth_service.dart';
 void main() {
-  // 1. Ensures the native Flutter engine framework is initialized
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // 2. Render instantly with a boot loader to prevent blank OS screens
   runApp(const NeurotickBootLoader());
 }
-
 class NeurotickBootLoader extends StatefulWidget {
   const NeurotickBootLoader({super.key});
-
   @override
   State<NeurotickBootLoader> createState() => _NeurotickBootLoaderState();
 }
-
 class _NeurotickBootLoaderState extends State<NeurotickBootLoader> {
   Future<void>? _initFuture;
-
   @override
   void initState() {
     super.initState();
     _initFuture = _initializeCore();
   }
-
   Future<void> _initializeCore() async {
     try {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      print("☁️ Firebase Cloud Framework Initialized Safely inside Mobile Core.");
+      print(" Firebase Cloud Framework Initialized Safely inside Mobile Core.");
     } catch (e) {
-      print("⚠️ Firebase Root Init Warning: Check your local google-services configuration. Details: $e");
+      print(" Firebase Root Init Warning: Check your local google-services configuration. Details: $e");
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return FutureBuilder(
       future: _initFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          // Instant draw Native Splash Equivalent
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             home: Scaffold(
@@ -69,11 +58,8 @@ class _NeurotickBootLoaderState extends State<NeurotickBootLoader> {
             ),
           );
         }
-
-        // 3. Mount the Global State Providers before booting the UI layer
         return MultiProvider(
           providers: [
-            // This spins up the active memory and socket engine the moment the app boots
             ChangeNotifierProvider(create: (_) => PortfolioService()),
           ],
           child: const MyApp(),
@@ -82,17 +68,13 @@ class _NeurotickBootLoaderState extends State<NeurotickBootLoader> {
     );
   }
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'NEUROTICK',
       debugShowCheckedModeBanner: false,
-      
-      // Applying your customized high-contrast quantitative dark theme
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Colors.black,
         appBarTheme: const AppBarTheme(
@@ -100,12 +82,9 @@ class MyApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      
-      // ⚡ THE GATEKEEPER: Listens to Firebase Auth changes reactively and routes user nodes automatically
       home: StreamBuilder<User?>(
         stream: AuthService().authStateChanges,
         builder: (context, snapshot) {
-          // While the Firebase engine performs key decryption / token validation verification, show fallback progress indicator
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
               backgroundColor: Colors.black,
@@ -114,16 +93,12 @@ class MyApp extends StatelessWidget {
               ),
             );
           }
-          
-          // If a secure validated user data snapshot returns from the matrix, boot directly to Main Workspace
           if (snapshot.hasData) {
             return const MainWrapper();
-          } 
-          
-          // Otherwise, block unauthorized navigation access vectors and prompt for uplink credentials
+          }
           return const AuthScreen();
         },
-      ), 
+      ),
     );
   }
 }

@@ -2,14 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'stock_prediction_screen.dart';
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
-
 class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic> momentum = {};
   List<Map<String, dynamic>> news = [];
@@ -17,26 +14,22 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLoadingMomentum = true;
   bool isLoadingNews = true;
   Timer? _refreshTimer;
-
   @override
   void initState() {
     super.initState();
     _loadAllData();
     _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) => _loadAllData());
   }
-
   @override
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
   }
-
   void _loadAllData() async {
     _loadMomentum();
     _loadNews();
     _loadWatchlist();
   }
-
   void _loadMomentum() async {
     try {
       final data = await ApiService().getMarketMomentum();
@@ -45,7 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) setState(() => isLoadingMomentum = false);
     }
   }
-
   void _loadNews() async {
     try {
       final data = await ApiService().getMarketNews();
@@ -54,16 +46,13 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) setState(() => isLoadingNews = false);
     }
   }
-
   void _loadWatchlist() async {
     try {
       final data = await ApiService().getWatchlistOverview();
       if (mounted) setState(() => watchlistStocks = data);
     } catch (_) {
-      // Silent — don't crash the home screen
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,22 +64,14 @@ class _HomeScreenState extends State<HomeScreen> {
             floating: true,
             title: const Text("NEUROTICK TERMINAL", style: TextStyle(color: Colors.white, fontSize: 14, letterSpacing: 2, fontWeight: FontWeight.bold)),
           ),
-          
-          // 1. Market Momentum — Live Data
           SliverToBoxAdapter(child: _buildMomentumCard()),
-
-          // 2. Stock Recommendations by Trading Style
           SliverToBoxAdapter(child: _buildStockRecommendations()),
-
-          // 3. Real-Time News Header
           const SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.only(left: 20, top: 30, bottom: 10),
               child: Text("REAL-TIME INTELLIGENCE", style: TextStyle(color: Colors.white54, fontSize: 12, letterSpacing: 1.5)),
             ),
           ),
-
-          // 4. News Cards — Live from yfinance
           isLoadingNews
             ? const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFF9D4EDD)))))
             : news.isEmpty
@@ -101,26 +82,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     childCount: news.length,
                   ),
                 ),
-          
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
   }
-
-  // ==========================================
-  // 📊 MARKET MOMENTUM CARD — LIVE DATA
-  // ==========================================
   Widget _buildMomentumCard() {
     final state = momentum['state'] ?? 'LOADING';
     final momentumLevel = momentum['momentum'] ?? 'LOADING';
     final summary = momentum['summary'] ?? 'Fetching market data...';
     final strategy = momentum['strategy'] ?? 'Loading...';
     final niftyChange = (momentum['nifty_change'] ?? 0.0).toDouble();
-    
     final bool isBullish = state == 'BULLISH';
     final Color stateColor = isBullish ? const Color(0xFF00FFA3) : (state == 'BEARISH' ? Colors.redAccent : Colors.amber);
-    
     return Container(
       margin: const EdgeInsets.all(20),
       padding: const EdgeInsets.all(24),
@@ -149,7 +123,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 14),
-            // Nifty/Sensex summary
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -175,22 +148,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
     );
   }
-
-  // ==========================================
-  // 🎯 STOCK RECOMMENDATIONS BY TRADING STYLE
-  // ==========================================
   Widget _buildStockRecommendations() {
-    // Group stocks by trading style from watchlist data
     Map<String, List<Map<String, dynamic>>> grouped = {};
     for (var stock in watchlistStocks) {
       final style = stock['trading_style']?.toString() ?? stock['signal']?.toString() ?? 'VIEW';
       grouped.putIfAbsent(style, () => []);
       grouped[style]!.add(stock);
     }
-
-    // Fallback categories if watchlist doesn't have trading_style
     final tabs = grouped.keys.isNotEmpty ? grouped.keys.toList() : ['TODAY', 'SHORT-TERM', 'LONG-TERM'];
-    
     return DefaultTabController(
       length: tabs.length,
       child: Column(
@@ -227,16 +192,13 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
   Widget _buildRecommendationTile(Map<String, dynamic> stock, String style) {
     final symbol = stock['symbol']?.toString() ?? 'UNKNOWN';
     final price = (stock['price'] ?? stock['current_price'] ?? 0).toDouble();
     final changePct = (stock['change_pct'] ?? 0).toDouble();
     final isPositive = changePct >= 0;
-    
     return GestureDetector(
       onTap: () {
-        // Show bottom sheet with trading style reasoning, then navigate
         _showStyleReasoning(context, stock, style);
       },
       child: Container(
@@ -265,13 +227,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
   void _showStyleReasoning(BuildContext context, Map<String, dynamic> stock, String style) {
     final symbol = stock['symbol']?.toString() ?? 'UNKNOWN';
     final reason = stock['style_reason']?.toString() ?? 'This stock is recommended for $style trading based on current market analysis.';
     final rsi = (stock['rsi'] ?? 50).toDouble();
     final volatility = (stock['volatility'] ?? 0).toDouble();
-    
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0A0A0A),
@@ -317,7 +277,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
   Widget _buildMetricChip(String label, String value, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -334,17 +293,12 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // ==========================================
-  // 📰 REAL NEWS CARD
-  // ==========================================
   Widget _buildNewsCard(Map<String, dynamic> item) {
     final title = item['title']?.toString() ?? '';
     final publisher = item['publisher']?.toString() ?? 'Market Wire';
     final timeAgo = item['time_ago']?.toString() ?? '';
     final thumbnail = item['thumbnail']?.toString() ?? '';
     final relatedSymbol = item['related_symbol']?.toString() ?? '';
-    
     return GestureDetector(
       onTap: relatedSymbol.isNotEmpty ? () {
         Navigator.push(context, MaterialPageRoute(builder: (_) => StockPredictionScreen(symbol: relatedSymbol)));

@@ -1,24 +1,18 @@
 import 'dart:ui';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
-
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
-
   Future<void> init() async {
     if (_initialized) return;
-
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidSettings);
-    
     await _plugin.initialize(initSettings);
     _initialized = true;
   }
-
   Future<void> showProfitAlert({
     required String symbol,
     required double profitPercent,
@@ -26,7 +20,6 @@ class NotificationService {
     required double buyPrice,
   }) async {
     if (!_initialized) await init();
-
     final androidDetails = AndroidNotificationDetails(
       'profit_alerts',
       'Profit Alerts',
@@ -37,9 +30,7 @@ class NotificationService {
       enableVibration: true,
       playSound: true,
     );
-    
     final details = NotificationDetails(android: androidDetails);
-    
     await _plugin.show(
       symbol.hashCode,
       '$symbol +${profitPercent.toStringAsFixed(1)}% Profit!',
@@ -47,14 +38,12 @@ class NotificationService {
       details,
     );
   }
-
   Future<void> showTargetReachedAlert({
     required String symbol,
     required double currentPrice,
     required double targetPrice,
   }) async {
     if (!_initialized) await init();
-
     final androidDetails = AndroidNotificationDetails(
       'target_alerts',
       'Target Price Alerts',
@@ -64,9 +53,7 @@ class NotificationService {
       color: const Color(0xFF00FFA3),
       enableVibration: true,
     );
-    
     final details = NotificationDetails(android: androidDetails);
-    
     await _plugin.show(
       (symbol.hashCode + 1000),
       '$symbol Target Reached!',
@@ -74,14 +61,12 @@ class NotificationService {
       details,
     );
   }
-
   Future<void> showStopLossAlert({
     required String symbol,
     required double currentPrice,
     required double stopLoss,
   }) async {
     if (!_initialized) await init();
-
     final androidDetails = AndroidNotificationDetails(
       'stoploss_alerts',
       'Stop Loss Alerts',
@@ -91,9 +76,7 @@ class NotificationService {
       color: const Color(0xFFFF5252),
       enableVibration: true,
     );
-    
     final details = NotificationDetails(android: androidDetails);
-    
     await _plugin.show(
       (symbol.hashCode + 2000),
       '$symbol Stop Loss Hit!',

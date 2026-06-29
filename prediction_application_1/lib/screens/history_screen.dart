@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -18,18 +16,15 @@ class HistoryScreen extends StatelessWidget {
       body: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         physics: const BouncingScrollPhysics(),
-        itemCount: 8, // Placeholder for logged trades
+        itemCount: 8,
         itemBuilder: (context, index) {
           return _buildHistoryItem(index);
         },
       ),
     );
   }
-
   Widget _buildHistoryItem(int index) {
-    // Mock data for visual perfection
-    bool isWin = index % 2 == 0; 
-    
+    bool isWin = index % 2 == 0;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),

@@ -7,12 +7,10 @@ import '../services/api_service.dart';
 import '../services/live_stream_service.dart';
 import '../models/stock_data.dart';
 import 'investment_helper_page.dart';
-import '../utils/app_state.dart'; 
+import '../utils/app_state.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/global_chat_bot.dart';
 import '../widgets/stock_chart.dart';
-
-// --- DATA MODELS ---
 class ChartNode {
   final DateTime time;
   final double open;
@@ -22,7 +20,6 @@ class ChartNode {
   final bool isPredicted;
   final String pattern;
   final String risk;
-
   ChartNode({
     required this.time,
     required this.open,
@@ -34,31 +31,24 @@ class ChartNode {
     this.risk = "Low risk",
   });
 }
-
 class StockPredictionScreen extends StatefulWidget {
   final String symbol;
   const StockPredictionScreen({super.key, required this.symbol});
-
   @override
   State<StockPredictionScreen> createState() => _StockPredictionScreenState();
 }
-
 class _StockPredictionScreenState extends State<StockPredictionScreen> {
   StockData? data;
   bool isLoading = true;
   String? _errorMessage;
-  
   final LiveStreamService _streamService = LiveStreamService();
   StreamSubscription? _streamSubscription;
   late TrackballBehavior _trackballBehavior;
-  Timer? _autoRefreshTimer; // 1-minute auto-refresh for latest candle forecast
-
-  // Theme Colors
+  Timer? _autoRefreshTimer;
   final Color bgDark = const Color(0xFF0F1219);
   final Color cardDark = const Color(0xFF161A23);
   final Color neonGreen = const Color(0xFF22D372);
   final Color neonRed = const Color(0xFFF34141);
-
   @override
   void initState() {
     super.initState();
@@ -74,29 +64,21 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       lineColor: Colors.white24,
     );
     _startLiveStream();
-    // Start 1-minute auto-refresh for latest candle forecast
     _autoRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _refreshForecast();
     });
   }
-
   StockData _normalizeStockData(StockData data) {
     if (data.history.isEmpty || data.predictedPath.isEmpty) return data;
-    
     double lastRealClose = data.currentPrice > 0 ? data.currentPrice : data.history.last.close;
     double rawBase = data.predictedPath.first.close;
     double offset = lastRealClose - rawBase;
-    
-    // Limit history to 25 candles for a zoomed-in, beautiful view
-    List<CandleModel> trimmedHistory = data.history.length > 25 
-        ? data.history.sublist(data.history.length - 25) 
+    List<CandleModel> trimmedHistory = data.history.length > 25
+        ? data.history.sublist(data.history.length - 25)
         : data.history;
-    
-    // Limit predictions to 6-8 candles
-    List<CandleModel> trimmedFuture = data.predictedPath.length > 8 
-        ? data.predictedPath.sublist(0, 8) 
+    List<CandleModel> trimmedFuture = data.predictedPath.length > 8
+        ? data.predictedPath.sublist(0, 8)
         : data.predictedPath;
-        
     List<CandleModel> newPath = trimmedFuture.map((p) => CandleModel(
       time: p.time,
       open: p.open + offset,
@@ -107,14 +89,10 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       pattern: p.pattern,
       risk: p.risk,
     )).toList();
-    
-    // Derive target & stop loss from the NORMALIZED predicted candles
-    // so they stay within the visible chart range
     double maxPredictedClose = newPath.fold(newPath.first.close, (m, c) => c.close > m ? c.close : m);
     double minPredictedLow = newPath.fold(newPath.first.low, (m, c) => c.low < m ? c.low : m);
     double newTarget = maxPredictedClose;
     double newStopLoss = minPredictedLow;
-    
     return StockData(
       symbol: data.symbol,
       currentPrice: data.currentPrice,
@@ -135,7 +113,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       trendLogic: data.trendLogic,
     );
   }
-
   void _refreshForecast() async {
     if (!mounted) return;
     try {
@@ -144,33 +121,25 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         setState(() => data = _normalizeStockData(freshData));
       }
     } catch (_) {
-      // Silent refresh — don't disrupt the user
     }
   }
-
   void _startLiveStream() async {
     if (!mounted) return;
     setState(() { isLoading = true; _errorMessage = null; });
-    
     try {
       final initialData = await ApiService().fetchPrediction(widget.symbol, "intraday");
       if (!mounted) return;
       setState(() { data = _normalizeStockData(initialData); isLoading = false; });
     } catch (e) {
       if (!mounted) return;
-      // Extract the meaningful part of the error message
       String errMsg = e.toString().replaceAll('Exception: ', '');
       setState(() { isLoading = false; _errorMessage = errMsg; });
-      return; 
+      return;
     }
-
     _streamSubscription = _streamService.connectToLiveStream(widget.symbol).listen(
       (liveData) {
         if (!mounted || data == null) return;
         setState(() {
-          // ⚡ ONLY update the live price, RSI, and trend from the stream.
-          // Preserve the original rich history & predicted path from the
-          // initial API call so the chart doesn't squeeze/collapse.
           data = StockData(
             symbol: data!.symbol,
             currentPrice: liveData.currentPrice,
@@ -179,7 +148,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             sentiment: data!.sentiment,
             suitability: data!.suitability,
             action: data!.action,
-            reasoning: data!.reasoning, 
+            reasoning: data!.reasoning,
             stopLoss: data!.stopLoss,
             targetPrice: data!.targetPrice,
             buyTime: data!.buyTime,
@@ -193,12 +162,11 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         });
       },
       onError: (e) {
-        debugPrint("⚠️ Live stream error: $e");
+        debugPrint(" Live stream error: $e");
       },
       cancelOnError: false,
     );
   }
-
   @override
   void dispose() {
     _autoRefreshTimer?.cancel();
@@ -207,50 +175,37 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     _streamService.disconnect();
     super.dispose();
   }
-
   List<ChartNode> _buildForecastNodes(DateTime cutoffTime, double lastClose) {
     List<ChartNode> nodes = [];
-    Random rand = Random(42); 
-    
+    Random rand = Random(42);
     for (int i = 0; i < data!.predictedPath.length; i++) {
       DateTime time = cutoffTime.add(Duration(minutes: 15 * (i + 1)));
       var c = data!.predictedPath[i];
-      
       double pClose = c.close;
       double pOpen = i == 0 ? lastClose : data!.predictedPath[i - 1].close;
-      double variance = pClose * 0.002; 
+      double variance = pClose * 0.002;
       double pHigh = max(pOpen, pClose) + (rand.nextDouble() * variance);
       double pLow = min(pOpen, pClose) - (rand.nextDouble() * variance);
-
       nodes.add(ChartNode(
-        time: time, open: pOpen, high: pHigh, low: pLow, close: pClose, 
+        time: time, open: pOpen, high: pHigh, low: pLow, close: pClose,
         isPredicted: true, pattern: c.pattern ?? "Standard", risk: c.risk ?? "Low risk"
       ));
     }
     return nodes;
   }
-
-  // ==========================================
-  // ⚠️ ERROR STATE WITH MARKET-CLOSED DETECTION & RETRY
-  // ==========================================
   bool _isMarketClosed() {
-    final now = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30)); // IST
-    final weekday = now.weekday; // 1=Mon ... 7=Sun
-    if (weekday == 6 || weekday == 7) return true; // Weekend
+    final now = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
+    final weekday = now.weekday;
+    if (weekday == 6 || weekday == 7) return true;
     final minutes = now.hour * 60 + now.minute;
-    // NSE trading hours: 9:15 AM to 3:30 PM IST
-    return minutes < 555 || minutes > 930; // 555 = 9:15, 930 = 15:30
+    return minutes < 555 || minutes > 930;
   }
-
   Widget _buildErrorScreen() {
-    final bool marketClosed = false; // _isMarketClosed(); bypassed for testing
-    
-    // Pick the right icon, title, and message based on context
+    final bool marketClosed = false;
     final IconData icon;
     final String title;
     final String subtitle;
     final Color accentColor;
-
     if (marketClosed) {
       icon = Icons.nightlight_round;
       title = "MARKET CLOSED";
@@ -272,7 +227,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       subtitle = _errorMessage ?? "Unable to fetch market data.\nPlease check your connection and retry.";
       accentColor = Colors.redAccent;
     }
-
     return Scaffold(
       backgroundColor: bgDark,
       appBar: AppBar(
@@ -286,7 +240,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Glowing icon container
               Container(
                 width: 80,
                 height: 80,
@@ -325,7 +278,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                 ),
               ),
               const SizedBox(height: 36),
-              // Retry button
               SizedBox(
                 width: double.infinity,
                 height: 48,
@@ -343,7 +295,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              // Go back button
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text("← BACK TO WATCHLIST", style: TextStyle(color: Colors.white24, fontSize: 11, letterSpacing: 1)),
@@ -354,7 +305,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -363,43 +313,31 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     if (data == null || data!.history.isEmpty) {
       return _buildErrorScreen();
     }
-
-    // ⚡ PRE-CALCULATE ALL DATA NODES ONCE FOR PERFECT SYNCHRONIZATION
     List<ChartNode> historyNodes = [];
-    // Use a fixed market-session anchor: today at 09:15 IST
     final now = DateTime.now();
-    // Anchor the history so the last candle ends at ~current time
     final DateTime lastCandleTime = DateTime(now.year, now.month, now.day, now.hour,
-        (now.minute ~/ 15) * 15); // Round down to nearest 15 min
-
+        (now.minute ~/ 15) * 15);
     for (int i = 0; i < data!.history.length; i++) {
-      // Spread candles backwards from lastCandleTime
       DateTime time = lastCandleTime.subtract(Duration(minutes: 15 * (data!.history.length - 1 - i)));
       var c = data!.history[i];
-      // Use currentPrice as fallback but ensure we have at least a tiny OHLC spread
       double close = c.close > 0 ? c.close : data!.currentPrice;
       double open = c.open > 0 ? c.open : close;
       double high = c.high > 0 ? c.high : (close > open ? close : open) * 1.001;
       double low = c.low > 0 ? c.low : (close < open ? close : open) * 0.999;
       historyNodes.add(ChartNode(time: time, open: open, high: high, low: low, close: close));
     }
-
     DateTime cutoffTime = historyNodes.isNotEmpty ? historyNodes.last.time : lastCandleTime;
     double lastClose = historyNodes.isNotEmpty ? historyNodes.last.close : data!.currentPrice;
-    
     List<ChartNode> forecastNodes = _buildForecastNodes(cutoffTime, lastClose);
-
-    // ⚡ MATHEMATICAL SEARCH: Find Exact Execution Times based on highest and lowest future prices
     ChartNode? bestBuyNode;
     ChartNode? bestSellNode;
     if (forecastNodes.isNotEmpty) {
       bestBuyNode = forecastNodes.reduce((curr, next) => curr.close < next.close ? curr : next);
       bestSellNode = forecastNodes.reduce((curr, next) => curr.close > next.close ? curr : next);
     }
-
     return Scaffold(
       backgroundColor: bgDark,
-      extendBody: true, 
+      extendBody: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -420,7 +358,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 100), 
+        padding: const EdgeInsets.only(bottom: 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -442,7 +380,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
   Widget _buildHeaderPrice() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -486,7 +423,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
   Widget _buildChartSection(List<ChartNode> historyNodes, List<ChartNode> forecastNodes, DateTime cutoffTime, ChartNode? bestBuy, ChartNode? bestSell) {
     return Column(
       children: [
@@ -524,7 +460,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ],
     );
   }
-
   Widget _buildLegendDot(Color color, String label, {Color? borderColor}) {
     return Row(
       children: [
@@ -540,11 +475,9 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ],
     );
   }
-
   Widget _buildImmediatePredictionCard(List<ChartNode> forecastNodes) {
     if (forecastNodes.isEmpty) return const SizedBox.shrink();
     ChartNode firstFuture = forecastNodes.first;
-
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 25, 20, 0),
       padding: const EdgeInsets.all(16),
@@ -595,7 +528,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
   Widget _buildOHLCValue(String label, double value) {
     return Column(
       children: [
@@ -605,7 +537,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ],
     );
   }
-
   Widget _buildConfidenceAndActionCards(ChartNode? bestBuy, ChartNode? bestSell) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
@@ -630,7 +561,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
           const SizedBox(height: 20),
           Row(
             children: [
-              // ⚡ BEST BUY CARD (Dynamically Synced to AI Path)
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(15),
@@ -660,8 +590,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              
-              // ⚡ BEST SELL CARD (Dynamically Synced to AI Path)
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(15),
@@ -696,10 +624,8 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
   Widget _buildUpcomingForecastList(List<ChartNode> forecastNodes, ChartNode? bestBuy, ChartNode? bestSell) {
     if (forecastNodes.isEmpty) return const SizedBox.shrink();
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -710,7 +636,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             children: [
               const Text("Upcoming candle forecast", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               TextButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InvestmentHelperPage(data: data!))), 
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InvestmentHelperPage(data: data!))),
                 child: Text("View all >", style: TextStyle(color: neonGreen, fontSize: 12))
               )
             ],
@@ -723,12 +649,9 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             itemBuilder: (context, index) {
               ChartNode node = forecastNodes[index];
               Color riskColor = node.risk.contains("Low") ? neonGreen : (node.risk.contains("Med") ? Colors.orange : neonRed);
-              
-              // ⚡ Dynamic tagging based on exact time sync
               String actLabel = "";
               if (node.time == bestBuy?.time) actLabel = "BUY";
               if (node.time == bestSell?.time) actLabel = "SELL";
-
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(16),
@@ -787,17 +710,11 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
-  // ==========================================
-  // 📊 BUY/SELL SIGNAL CARD WITH TIMESTAMPS
-  // ==========================================
   Widget _buildBuySellSignalCard() {
     if (data == null) return const SizedBox.shrink();
-    
     final action = data!.action;
     final isBuy = action == "BUY";
     final actionColor = isBuy ? neonGreen : (action == "SELL" ? neonRed : Colors.amber);
-    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(20),
@@ -833,7 +750,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Buy & Sell time row
           Row(
             children: [
               Expanded(
@@ -846,7 +762,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Target & Stop Loss row
           Row(
             children: [
               Expanded(
@@ -859,13 +774,11 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          // AI Reasoning
           Text(data!.reasoning, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.5)),
         ],
       ),
     );
   }
-
   Widget _buildTimeBlock(String label, String time, Color color, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -890,7 +803,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
   Widget _buildPriceChip(String label, double price, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -907,17 +819,11 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
-  // ==========================================
-  // 🎯 TRADING STYLE RECOMMENDATION CARD
-  // ==========================================
   Widget _buildTradingStyleCard() {
     if (data == null) return const SizedBox.shrink();
-    
     final style = data!.tradingStyle;
     final IconData styleIcon;
     final Color styleColor;
-    
     switch (style) {
       case "Scalping":
         styleIcon = Icons.flash_on_rounded;
@@ -939,7 +845,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
         styleIcon = Icons.auto_graph;
         styleColor = Colors.white54;
     }
-    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.all(16),
@@ -978,10 +883,6 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       ),
     );
   }
-
-  // ==========================================
-  // 🤖 AI BOT LINK AT BOTTOM
-  // ==========================================
   Widget _buildAiBotLink() {
     return GestureDetector(
       onTap: () => GlobalChatBot.show(context, data: data),

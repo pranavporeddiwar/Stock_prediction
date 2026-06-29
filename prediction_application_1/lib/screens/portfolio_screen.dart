@@ -1,21 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/portfolio_service.dart';
-
 class PortfolioScreen extends StatelessWidget {
   const PortfolioScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     final service = Provider.of<PortfolioService>(context);
     final isProfitable = service.overallPnL >= 0;
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
-        title: const Text("NEURAL PORTFOLIO HOLDINGS", 
+        title: const Text("NEURAL PORTFOLIO HOLDINGS",
           style: TextStyle(color: Colors.white, fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
@@ -26,7 +23,6 @@ class PortfolioScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // 📊 Unified Metrics Panel Card
           Container(
             padding: const EdgeInsets.all(24),
             margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -43,7 +39,7 @@ class PortfolioScreen extends StatelessWidget {
                   children: [
                     const Text("PORTFOLIO VALUE", style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 6),
-                    Text("₹${service.overallValue.toStringAsFixed(2)}", 
+                    Text("₹${service.overallValue.toStringAsFixed(2)}",
                       style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
                   ],
                 ),
@@ -53,10 +49,10 @@ class PortfolioScreen extends StatelessWidget {
                     const Text("REAL-TIME P&L", style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 6),
                     Text(
-                      "${isProfitable ? '+' : ''}₹${service.overallPnL.toStringAsFixed(2)} (${service.overallPnLPercentage.toStringAsFixed(2)}%)", 
+                      "${isProfitable ? '+' : ''}₹${service.overallPnL.toStringAsFixed(2)} (${service.overallPnLPercentage.toStringAsFixed(2)}%)",
                       style: TextStyle(
-                        color: isProfitable ? const Color(0xFF00FFA3) : Colors.redAccent, 
-                        fontSize: 14, 
+                        color: isProfitable ? const Color(0xFF00FFA3) : Colors.redAccent,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         fontFamily: 'monospace'
                       )
@@ -66,8 +62,6 @@ class PortfolioScreen extends StatelessWidget {
               ],
             ),
           ),
-
-          // 📈 Interactive Owned Asset Ledger Lists
           Expanded(
             child: service.ownedStocks.isEmpty
                 ? const Center(child: Text("No monitored assets added to memory yet.", style: TextStyle(color: Colors.white24, fontSize: 11)))
@@ -77,7 +71,6 @@ class PortfolioScreen extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final asset = service.ownedStocks[index];
                       final assetProfit = asset.totalProfitLoss >= 0;
-
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(18),
@@ -88,35 +81,33 @@ class PortfolioScreen extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            // Alert Toggle Button
                             GestureDetector(
                               onTap: () => service.toggleAlert(asset.symbol),
                               child: Container(
                                 width: 32, height: 32,
                                 margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
-                                  color: service.isAlertEnabled(asset.symbol) 
-                                    ? const Color(0xFF00FFA3).withOpacity(0.15) 
+                                  color: service.isAlertEnabled(asset.symbol)
+                                    ? const Color(0xFF00FFA3).withOpacity(0.15)
                                     : Colors.white.withOpacity(0.05),
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: service.isAlertEnabled(asset.symbol) 
-                                      ? const Color(0xFF00FFA3).withOpacity(0.4) 
+                                    color: service.isAlertEnabled(asset.symbol)
+                                      ? const Color(0xFF00FFA3).withOpacity(0.4)
                                       : Colors.white10,
                                   ),
                                 ),
                                 child: Icon(
-                                  service.isAlertEnabled(asset.symbol) 
-                                    ? Icons.notifications_active 
+                                  service.isAlertEnabled(asset.symbol)
+                                    ? Icons.notifications_active
                                     : Icons.notifications_off_outlined,
-                                  color: service.isAlertEnabled(asset.symbol) 
-                                    ? const Color(0xFF00FFA3) 
+                                  color: service.isAlertEnabled(asset.symbol)
+                                    ? const Color(0xFF00FFA3)
                                     : Colors.white24,
                                   size: 16,
                                 ),
                               ),
                             ),
-                            // Stock Info
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,7 +120,6 @@ class PortfolioScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            // Price & P&L
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
@@ -151,12 +141,10 @@ class PortfolioScreen extends StatelessWidget {
       ),
     );
   }
-
   void _openAddPositionDialog(BuildContext context, PortfolioService service) {
     final symController = TextEditingController();
     final qtyController = TextEditingController();
     final priceController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

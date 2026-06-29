@@ -1,29 +1,22 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
-
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
-
 class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
   final AuthService _auth = AuthService();
   final _formKey = GlobalKey<FormState>();
-
   final _emailController = TextEditingController();
   final _passController = TextEditingController();
   final _confirmPassController = TextEditingController();
-
   bool _isLogin = true;
   bool _isLoading = false;
   bool _obscurePass = true;
   bool _obscureConfirm = true;
-
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
-
   @override
   void initState() {
     super.initState();
@@ -31,7 +24,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
     _animController.forward();
   }
-
   @override
   void dispose() {
     _emailController.dispose();
@@ -40,7 +32,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     _animController.dispose();
     super.dispose();
   }
-
   void _toggleMode() {
     _animController.reverse().then((_) {
       setState(() {
@@ -52,20 +43,17 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       _animController.forward();
     });
   }
-
   String? _validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) return 'Email is required';
     final emailRegex = RegExp(r'^[\w\-.+]+@([\w-]+\.)+[\w-]{2,}$');
     if (!emailRegex.hasMatch(value.trim())) return 'Enter a valid email';
     return null;
   }
-
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) return 'Password is required';
     if (value.length < 6) return 'Minimum 6 characters';
     return null;
   }
-
   String? _validateConfirmPassword(String? value) {
     if (!_isLogin) {
       if (value == null || value.isEmpty) return 'Confirm your password';
@@ -73,10 +61,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     }
     return null;
   }
-
   void _authenticate() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
     try {
       if (_isLogin) {
@@ -84,7 +70,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       } else {
         await _auth.signUp(_emailController.text, _passController.text);
       }
-      // authStateChanges stream in main.dart auto-routes on success
     } catch (e) {
       if (mounted) {
         _showError(e.toString().replaceAll('Exception: ', ''));
@@ -93,11 +78,9 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
   void _showForgotPasswordDialog() {
     final resetEmailController = TextEditingController(text: _emailController.text);
     final resetFormKey = GlobalKey<FormState>();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -115,14 +98,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Drag handle
                 Container(
                   width: 40, height: 4,
                   decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
                 ),
                 const SizedBox(height: 24),
-
-                // Icon
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -132,7 +112,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   child: const Icon(Icons.lock_reset, color: Color(0xFF9D4EDD), size: 32),
                 ),
                 const SizedBox(height: 20),
-
                 const Text(
                   "RESET PASSWORD",
                   style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 2),
@@ -144,7 +123,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.5),
                 ),
                 const SizedBox(height: 24),
-
                 TextFormField(
                   controller: resetEmailController,
                   style: const TextStyle(color: Colors.white),
@@ -172,7 +150,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   ),
                 ),
                 const SizedBox(height: 24),
-
                 StatefulBuilder(
                   builder: (ctx, setSheetState) {
                     bool isSending = false;
@@ -209,7 +186,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                     );
                   },
                 ),
-
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
@@ -222,7 +198,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       ),
     );
   }
-
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -240,7 +215,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       ),
     );
   }
-
   void _showSuccess(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -258,7 +232,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       ),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -273,7 +246,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo
                   Image.asset(
                     'assets/images/logo.png',
                     width: 140,
@@ -288,10 +260,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                     _isLogin ? "Sign in to your terminal" : "Create a new account",
                     style: const TextStyle(color: Colors.white38, fontSize: 13),
                   ),
-
                   const SizedBox(height: 40),
-
-                  // Email
                   _buildFormField(
                     controller: _emailController,
                     hint: "Email address",
@@ -300,8 +269,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                     keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 16),
-
-                  // Password
                   _buildFormField(
                     controller: _passController,
                     hint: "Password",
@@ -311,8 +278,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                     obscure: _obscurePass,
                     onToggleObscure: () => setState(() => _obscurePass = !_obscurePass),
                   ),
-
-                  // Confirm Password (signup only)
                   if (!_isLogin) ...[
                     const SizedBox(height: 16),
                     _buildFormField(
@@ -325,8 +290,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                       onToggleObscure: () => setState(() => _obscureConfirm = !_obscureConfirm),
                     ),
                   ],
-
-                  // Forgot Password link (login only)
                   if (_isLogin) ...[
                     const SizedBox(height: 10),
                     Align(
@@ -341,10 +304,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                       ),
                     ),
                   ],
-
                   const SizedBox(height: 24),
-
-                  // Main Auth Button
                   SizedBox(
                     width: double.infinity,
                     height: 54,
@@ -367,10 +327,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                             ),
                     ),
                   ),
-
                   const SizedBox(height: 30),
-
-                  // Divider
                   Row(
                     children: [
                       Expanded(child: Container(height: 1, color: Colors.white10)),
@@ -381,10 +338,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                       Expanded(child: Container(height: 1, color: Colors.white10)),
                     ],
                   ),
-
                   const SizedBox(height: 24),
-
-                  // Toggle login/signup
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -413,7 +367,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       ),
     );
   }
-
   Widget _buildFormField({
     required TextEditingController controller,
     required String hint,

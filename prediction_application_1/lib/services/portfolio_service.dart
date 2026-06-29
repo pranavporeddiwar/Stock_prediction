@@ -6,31 +6,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/portfolio_item.dart';
 import 'api_service.dart';
 import 'notification_service.dart';
-
 class PortfolioService extends ChangeNotifier {
   final List<PortfolioItem> _ownedStocks = [];
   final Map<String, WebSocketChannel> _activeSockets = {};
   final NotificationService _notificationService = NotificationService();
-  
-  // Track which profit thresholds have been notified per symbol to avoid spam
   final Map<String, Set<int>> _notifiedThresholds = {};
-  // Profit thresholds in percentage — notify at each milestone
   static const List<int> _profitThresholds = [2, 5, 10, 15, 20];
-  
-  // Track alert-enabled symbols
   final Set<String> _alertEnabledSymbols = {};
-
   List<PortfolioItem> get ownedStocks => _ownedStocks;
   Set<String> get alertEnabledSymbols => _alertEnabledSymbols;
-
   double get overallInvestment => _ownedStocks.fold(0, (sum, item) => sum + item.totalInvestment);
   double get overallValue => _ownedStocks.fold(0, (sum, item) => sum + item.currentValue);
   double get overallPnL => overallValue - overallInvestment;
   double get overallPnLPercentage => overallInvestment > 0 ? (overallPnL / overallInvestment) * 100 : 0.0;
-
   PortfolioService() {
     _notificationService.init();
-    // Listen for Login/Logout events
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
         _loadPortfolioFromCloud(user.uid);
@@ -39,20 +29,16 @@ class PortfolioService extends ChangeNotifier {
       }
     });
   }
-
   bool isAlertEnabled(String symbol) => _alertEnabledSymbols.contains(symbol);
-  
   void toggleAlert(String symbol) {
     if (_alertEnabledSymbols.contains(symbol)) {
       _alertEnabledSymbols.remove(symbol);
     } else {
       _alertEnabledSymbols.add(symbol);
-      _notifiedThresholds[symbol] = {}; // Reset thresholds when re-enabled
+      _notifiedThresholds[symbol] = {};
     }
     notifyListeners();
   }
-
-  // Download portfolio from Cloud
   Future<void> _loadPortfolioFromCloud(String uid) async {
     try {
       final snapshot = await FirebaseFirestore.instance
@@ -60,15 +46,12 @@ class PortfolioService extends ChangeNotifier {
           .doc(uid)
           .collection('portfolio')
           .get();
-
       _ownedStocks.clear();
-      
       for (var doc in snapshot.docs) {
         final data = doc.data();
         final symbol = data['symbol'] ?? '';
         final qty = data['quantity'] ?? 0;
         final buyPrice = (data['averageBuyPrice'] ?? 0.0).toDouble();
-
         if (symbol.isNotEmpty && qty > 0) {
           final newItem = PortfolioItem(
             symbol: symbol,
@@ -77,7 +60,6 @@ class PortfolioService extends ChangeNotifier {
             currentLivePrice: buyPrice,
           );
           _ownedStocks.add(newItem);
-          // Auto-enable alerts for all portfolio items
           _alertEnabledSymbols.add(symbol);
           _notifiedThresholds[symbol] = {};
           _subscribeToLiveTick(symbol);
@@ -89,31 +71,22 @@ class PortfolioService extends ChangeNotifier {
       print("Cloud sync error: $e");
     }
   }
-
-  // Upload to Cloud & Local UI
   void addPosition(String symbol, int qty, double buyPrice) async {
     final cleanSymbol = symbol.trim().toUpperCase();
     if (cleanSymbol.isEmpty || qty <= 0 || buyPrice <= 0) return;
-
-    // Check if position already exists
     final existingIndex = _ownedStocks.indexWhere((item) => item.symbol == cleanSymbol);
     if (existingIndex >= 0) return;
-
     final newItem = PortfolioItem(
       symbol: cleanSymbol,
       quantity: qty,
       averageBuyPrice: buyPrice,
       currentLivePrice: buyPrice,
     );
-
     _ownedStocks.add(newItem);
-    // Auto-enable profit alerts when adding a new position
     _alertEnabledSymbols.add(cleanSymbol);
     _notifiedThresholds[cleanSymbol] = {};
     notifyListeners();
     _subscribeToLiveTick(cleanSymbol);
-
-    // Push to Firestore
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
@@ -133,15 +106,12 @@ class PortfolioService extends ChangeNotifier {
       }
     }
   }
-
   void _subscribeToLiveTick(String symbol) {
     if (_activeSockets.containsKey(symbol)) return;
-
     try {
       final wsUrl = ApiService.baseUrl.replaceFirst('http', 'ws');
       final channel = WebSocketChannel.connect(Uri.parse('$wsUrl/ws/live/$symbol'));
       _activeSockets[symbol] = channel;
-
       channel.stream.listen(
         (message) {
           final Map<String, dynamic> data = jsonDecode(message);
@@ -151,8 +121,6 @@ class PortfolioService extends ChangeNotifier {
               final newPrice = data['current_price'].toDouble();
               _ownedStocks[targetIndex].currentLivePrice = newPrice;
               notifyListeners();
-              
-              // Check profit thresholds and send notifications
               _checkAndNotifyProfit(_ownedStocks[targetIndex]);
             }
           }
@@ -167,16 +135,11 @@ class PortfolioService extends ChangeNotifier {
       print("WebSocket failure for $symbol: $e");
     }
   }
-
-  /// Checks if the stock has crossed any profit threshold and sends notification
   void _checkAndNotifyProfit(PortfolioItem item) {
     if (!_alertEnabledSymbols.contains(item.symbol)) return;
-    
     final profitPct = item.profitLossPercentage;
     final symbol = item.symbol;
-    
     _notifiedThresholds.putIfAbsent(symbol, () => {});
-    
     for (final threshold in _profitThresholds) {
       if (profitPct >= threshold && !_notifiedThresholds[symbol]!.contains(threshold)) {
         _notifiedThresholds[symbol]!.add(threshold);
@@ -186,11 +149,9 @@ class PortfolioService extends ChangeNotifier {
           currentPrice: item.currentLivePrice,
           buyPrice: item.averageBuyPrice,
         );
-        break; // Only send one notification per tick
+        break;
       }
     }
-    
-    // Also check for loss thresholds (stop loss alerts at -2%, -5%)
     if (profitPct <= -2 && !_notifiedThresholds[symbol]!.contains(-2)) {
       _notifiedThresholds[symbol]!.add(-2);
       _notificationService.showStopLossAlert(
@@ -200,8 +161,6 @@ class PortfolioService extends ChangeNotifier {
       );
     }
   }
-
-  // Cleanup on logout
   void _clearPortfolio() {
     _ownedStocks.clear();
     for (var channel in _activeSockets.values) {
@@ -212,10 +171,9 @@ class PortfolioService extends ChangeNotifier {
     _notifiedThresholds.clear();
     notifyListeners();
   }
-
   @override
   void dispose() {
     _clearPortfolio();
     super.dispose();
   }
-}
+}

@@ -1,20 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/stock_data.dart';
-
 class ApiService {
-  // Centralized endpoint configuration
-  // ☁️ Pointed globally to the Render Cloud Engine!
-  // Note: Your LiveStreamService will automatically transform 'https' to 'wss' for secure websockets.
   static const String baseUrl = "https://stock-prediction-dqo3.onrender.com";
-
-  /// Fetches the initial heavy structural data snapshot from the backend.
   Future<StockData> fetchPrediction(String symbol, String mode) async {
     final url = Uri.parse('$baseUrl/predict?symbol=${symbol.toUpperCase()}&mode=$mode');
-    
     try {
       final response = await http.get(url);
-
       if (response.statusCode == 200) {
         final Map<String, dynamic> decodedData = jsonDecode(response.body);
         return StockData.fromJson(decodedData);
@@ -25,19 +17,13 @@ class ApiService {
       throw Exception("Neural Bridge Connectivity Failure: $e");
     }
   }
-
-  /// Pulls the broad market overview data with enriched trading style analysis.
   Future<List<Map<String, dynamic>>> getWatchlistOverview() async {
     final url = Uri.parse('$baseUrl/watchlist');
-
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 20));
-
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-
         List<dynamic> rawList;
-
         if (decoded is List) {
           rawList = decoded;
         } else if (decoded is Map) {
@@ -45,7 +31,6 @@ class ApiService {
           for (final key in ['stocks', 'data', 'watchlist', 'results', 'items']) {
             if (decoded[key] is List) { found = decoded[key] as List<dynamic>; break; }
           }
-
           if (found != null) {
             rawList = found;
           } else if (decoded.values.every((v) => v is Map)) {
@@ -62,8 +47,6 @@ class ApiService {
         } else {
           rawList = [];
         }
-
-        // Return enriched data with all trading style fields
         return rawList.map<Map<String, dynamic>>((item) {
           if (item is Map) {
             return {
@@ -81,7 +64,6 @@ class ApiService {
           }
           return {'symbol': 'UNKNOWN', 'price': 0.0, 'signal': 'VIEW', 'change_pct': 0.0, 'rsi': 50.0, 'volatility': 0.0, 'trading_style': 'Intraday', 'style_reason': ''};
         }).toList();
-
       } else {
         throw Exception("Server error: ${response.statusCode}");
       }
@@ -89,17 +71,12 @@ class ApiService {
       throw Exception("Watchlist Service Offline: $e");
     }
   }
-
   double _parseDouble(dynamic val) {
     if (val == null) return 0.0;
     if (val is num) return val.toDouble();
     if (val is String) return double.tryParse(val) ?? 0.0;
     return 0.0;
   }
-
-  /// Sends a user chat message alongside their precise reactive viewport context,
-  /// full conversation history, and structured prediction data
-  /// straight to the unified FastAPI /chat endpoint.
   Future<String> sendChatMessage(
     String message,
     String context, {
@@ -108,15 +85,11 @@ class ApiService {
     Map<String, dynamic>? pageData,
   }) async {
     final url = Uri.parse('$baseUrl/chat');
-    
     try {
-      // Build the enriched payload with conversation history + prediction context
       final Map<String, dynamic> payload = {
         'message': message,
         'context': context,
       };
-
-      // Convert chat history into LLM-compatible format
       if (history != null && history.isNotEmpty) {
         payload['history'] = history.map((msg) {
           return {
@@ -125,23 +98,17 @@ class ApiService {
           };
         }).toList();
       }
-
-      // Attach structured prediction data if available
       if (predictionData != null) {
         payload['prediction_data'] = predictionData;
       }
-
-      // Attach structured page data for context-aware bot
       if (pageData != null) {
         payload['page_data'] = pageData;
       }
-
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
-
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
         return responseData['reply'] ?? "The neural network returned an empty synthesis state.";
@@ -152,14 +119,10 @@ class ApiService {
       throw Exception("Neural Tutor Node unreachable: $e");
     }
   }
-
-  /// Fetches real-time market news from yfinance via the backend.
   Future<List<Map<String, dynamic>>> getMarketNews() async {
     final url = Uri.parse('$baseUrl/news');
-    
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 15));
-      
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final List<dynamic> newsList = decoded['news'] ?? [];
@@ -173,14 +136,10 @@ class ApiService {
       return [];
     }
   }
-
-  /// Fetches overall market momentum (Nifty 50 + Sensex trends).
   Future<Map<String, dynamic>> getMarketMomentum() async {
     final url = Uri.parse('$baseUrl/market-momentum');
-    
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 10));
-      
       if (response.statusCode == 200) {
         return Map<String, dynamic>.from(jsonDecode(response.body));
       }
@@ -190,7 +149,6 @@ class ApiService {
       return _defaultMomentum();
     }
   }
-
   Map<String, dynamic> _defaultMomentum() {
     return {
       'state': 'NEUTRAL',

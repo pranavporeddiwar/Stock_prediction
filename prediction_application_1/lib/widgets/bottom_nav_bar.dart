@@ -1,27 +1,23 @@
 import 'package:flutter/material.dart';
-
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
-
   const BottomNavBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Outer decorative container to match the floating style in image_6cf2c1.png
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F111A), // Deep fintech dark background
+        color: const Color(0xFF0F111A),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF9D4EDD).withOpacity(0.1), // Floor glow
+            color: const Color(0xFF9D4EDD).withOpacity(0.1),
             blurRadius: 20,
             spreadRadius: 2,
           )
@@ -31,7 +27,7 @@ class BottomNavBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: BottomAppBar(
           color: const Color(0xFF0F111A),
-          shape: const CircularNotchedRectangle(), // Smooth dip for the center button
+          shape: const CircularNotchedRectangle(),
           notchMargin: 8.0,
           elevation: 0,
           clipBehavior: Clip.antiAlias,
@@ -52,10 +48,7 @@ class BottomNavBar extends StatelessWidget {
                   activeIcon: Icons.bar_chart,
                   label: "Markets",
                 ),
-
-                // Absolute dead space spacer so the notch doesn't overlap an icon
                 const SizedBox(width: 48),
-
                 _buildTabItem(
                   index: 2,
                   icon: Icons.pie_chart_outline,
@@ -75,7 +68,6 @@ class BottomNavBar extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildTabItem({
     required int index,
     required IconData icon,
@@ -84,7 +76,6 @@ class BottomNavBar extends StatelessWidget {
   }) {
     final bool isActive = currentIndex == index;
     final Color itemColor = isActive ? const Color(0xFF9D4EDD) : Colors.white38;
-
     return Expanded(
       child: InkWell(
         onTap: () => onTap(index),

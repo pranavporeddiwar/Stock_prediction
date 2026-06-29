@@ -6,13 +6,9 @@ import '../utils/app_state.dart';
 import '../models/stock_data.dart';
 import 'package:provider/provider.dart';
 import '../services/portfolio_service.dart';
-
 class GlobalChatBot extends StatefulWidget {
   final StockData? stockData;
-
   const GlobalChatBot({super.key, this.stockData});
-
-  /// Slide up the chat interface from anywhere — now with optional StockData for deep prediction context!
   static void show(BuildContext context, {StockData? data}) {
     showModalBottomSheet(
       context: context,
@@ -21,62 +17,47 @@ class GlobalChatBot extends StatefulWidget {
       builder: (context) => GlobalChatBot(stockData: data),
     );
   }
-
   @override
   State<GlobalChatBot> createState() => _GlobalChatBotState();
 }
-
 class _GlobalChatBotState extends State<GlobalChatBot> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   List<Map<String, String>> _messages = [];
   bool _isTyping = false;
   bool _isLoadingHistory = true;
-
-  // Storage key is scoped per-stock for relevant conversation threads
   String get _storageKey {
     final symbol = widget.stockData?.symbol ?? 'general';
     return 'chat_history_${symbol.toUpperCase()}';
   }
-
   String? get _activeSymbol => widget.stockData?.symbol.toUpperCase();
-
   @override
   void initState() {
     super.initState();
     _loadChatHistory();
   }
-
-  // ==========================================
-  // 💾 PERSISTENT CHAT HISTORY (SharedPreferences)
-  // ==========================================
   Future<void> _loadChatHistory() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? savedHistory = prefs.getString(_storageKey);
-
       if (savedHistory != null && savedHistory.isNotEmpty) {
         final List<dynamic> decoded = jsonDecode(savedHistory);
         _messages = decoded.map<Map<String, String>>((item) {
           return Map<String, String>.from(item as Map);
         }).toList();
-
-        // Cap at 50 messages to prevent storage bloat
         if (_messages.length > 50) {
           _messages = _messages.sublist(_messages.length - 50);
         }
       }
     } catch (e) {
-      debugPrint("⚠️ Chat history load error: $e");
+      debugPrint(" Chat history load error: $e");
     }
-
-    // Add welcome message if history is empty
     if (_messages.isEmpty) {
       String topic = _activeSymbol ?? "the broader market";
       _messages.add({
         "sender": "bot",
         "text":
-            "🙏 Namaste! Neural Tutor initialized for $topic.\n\n"
+            " Namaste! Neural Tutor initialized for $topic.\n\n"
             "I'm your Indian market expert. Ask me anything about:\n"
             "• Current AI prediction & signals\n"
             "• Upcoming price movement\n"
@@ -86,27 +67,23 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
             "All prices in ₹, all times in IST. How can I help your trading strategy today?"
       });
     }
-
     if (mounted) {
       setState(() => _isLoadingHistory = false);
       _scrollToBottom();
     }
   }
-
   Future<void> _saveChatHistory() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Cap at 50 messages before saving
       final messagesToSave =
           _messages.length > 50
               ? _messages.sublist(_messages.length - 50)
               : _messages;
       await prefs.setString(_storageKey, jsonEncode(messagesToSave));
     } catch (e) {
-      debugPrint("⚠️ Chat history save error: $e");
+      debugPrint(" Chat history save error: $e");
     }
   }
-
   Future<void> _clearChatHistory() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -130,7 +107,6 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
         ],
       ),
     );
-
     if (confirm == true) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_storageKey);
@@ -139,19 +115,14 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
         String topic = _activeSymbol ?? "the broader market";
         _messages.add({
           "sender": "bot",
-          "text": "🙏 Chat cleared! Neural Tutor reinitialized for $topic. How can I assist you?"
+          "text": " Chat cleared! Neural Tutor reinitialized for $topic. How can I assist you?"
         });
       });
       _saveChatHistory();
     }
   }
-
-  // ==========================================
-  // 📊 PREDICTION DATA SERIALIZER
-  // ==========================================
   Map<String, dynamic>? _buildPredictionPayload() {
     if (widget.stockData == null) return null;
-
     final d = widget.stockData!;
     return {
       "symbol": d.symbol,
@@ -176,13 +147,8 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
       }).toList(),
     };
   }
-
-  // ==========================================
-  // 📄 PAGE DATA CONTEXT GATHERER
-  // ==========================================
   Future<Map<String, dynamic>?> _gatherPageData() async {
-    if (widget.stockData != null) return null; // Already have specific stock data
-
+    if (widget.stockData != null) return null;
     final contextString = currentBotContext.value;
     try {
       if (contextString == "home") {
@@ -207,34 +173,25 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
         };
       } else if (contextString == "watchlist") {
         final overview = await ApiService().getWatchlistOverview();
-        return {"type": "watchlist", "items": overview.take(10).toList()}; // Take top 10
+        return {"type": "watchlist", "items": overview.take(10).toList()};
       }
     } catch (e) {
       debugPrint("Error gathering page data: \$e");
     }
     return null;
   }
-
-  // ==========================================
-  // 📨 SEND MESSAGE WITH FULL CONTEXT
-  // ==========================================
   void _sendMessage() async {
     if (_controller.text.trim().isEmpty) return;
     String userMsg = _controller.text.trim();
-
     setState(() {
       _messages.add({"sender": "user", "text": userMsg});
       _isTyping = true;
     });
-
     _controller.clear();
     _scrollToBottom();
-    _saveChatHistory(); // Persist the user message immediately
-
+    _saveChatHistory();
     try {
-      // ⚡ Send message with full conversation history + prediction data + page data
       final pageData = await _gatherPageData();
-      
       String reply = await ApiService().sendChatMessage(
         userMsg,
         currentBotContext.value,
@@ -242,13 +199,12 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
         predictionData: _buildPredictionPayload(),
         pageData: pageData,
       );
-
       if (mounted) {
         setState(() {
           _messages.add({"sender": "bot", "text": reply});
           _isTyping = false;
         });
-        _saveChatHistory(); // Persist the bot response
+        _saveChatHistory();
         _scrollToBottom();
       }
     } catch (e) {
@@ -256,7 +212,7 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
         setState(() {
           _messages.add({
             "sender": "bot",
-            "text": "⚠️ Connection error: Unable to reach neural network. Please try again."
+            "text": " Connection error: Unable to reach neural network. Please try again."
           });
           _isTyping = false;
         });
@@ -264,7 +220,6 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
       }
     }
   }
-
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -276,14 +231,12 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
       }
     });
   }
-
   @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -295,14 +248,7 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
       ),
       child: Column(
         children: [
-          // ═══════════════════════
-          // HEADER: Drag Handle, Title, Context Chip, Clear Button
-          // ═══════════════════════
           _buildHeader(),
-
-          // ═══════════════════════
-          // CHAT MESSAGES
-          // ═══════════════════════
           Expanded(
             child: _isLoadingHistory
                 ? const Center(
@@ -337,10 +283,6 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
                     },
                   ),
           ),
-
-          // ═══════════════════════
-          // TYPING INDICATOR
-          // ═══════════════════════
           if (_isTyping)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -370,21 +312,12 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
                 ),
               ),
             ),
-
-          // ═══════════════════════
-          // QUICK ACTION CHIPS (when viewing a prediction)
-          // ═══════════════════════
           if (widget.stockData != null) _buildQuickActions(),
-
-          // ═══════════════════════
-          // INPUT BOX
-          // ═══════════════════════
           _buildInputBox(),
         ],
       ),
     );
   }
-
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -418,7 +351,6 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
                   ),
                 ),
               ),
-              // Stock context chip
               if (_activeSymbol != null)
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -453,7 +385,6 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
                   ),
                 ),
               const SizedBox(width: 8),
-              // Clear history button
               GestureDetector(
                 onTap: _clearChatHistory,
                 child: Container(
@@ -475,7 +406,6 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
       ),
     );
   }
-
   Widget _buildMessageBubble(String text, bool isUser) {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -535,15 +465,13 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
       ),
     );
   }
-
   Widget _buildQuickActions() {
     final List<Map<String, String>> quickQuestions = [
-      {"label": "📈 Upcoming?", "question": "What could be the upcoming price prediction based on current movement?"},
-      {"label": "🎯 Target?", "question": "What is the exact target price and stop-loss for this stock?"},
-      {"label": "⏰ When to buy?", "question": "When is the best time to buy and sell today?"},
-      {"label": "⚡ Risk?", "question": "What is the current risk level and how should I manage it?"},
+      {"label": " Upcoming?", "question": "What could be the upcoming price prediction based on current movement?"},
+      {"label": " Target?", "question": "What is the exact target price and stop-loss for this stock?"},
+      {"label": " When to buy?", "question": "When is the best time to buy and sell today?"},
+      {"label": " Risk?", "question": "What is the current risk level and how should I manage it?"},
     ];
-
     return Container(
       height: 36,
       margin: const EdgeInsets.only(bottom: 8),
@@ -581,7 +509,6 @@ class _GlobalChatBotState extends State<GlobalChatBot> {
       ),
     );
   }
-
   Widget _buildInputBox() {
     return Container(
       padding: EdgeInsets.only(

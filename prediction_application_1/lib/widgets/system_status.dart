@@ -2,23 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../services/api_service.dart';
-
 class SystemStatusIndicator extends StatefulWidget {
   const SystemStatusIndicator({super.key});
-
   @override
   State<SystemStatusIndicator> createState() => _SystemStatusIndicatorState();
 }
-
 class _SystemStatusIndicatorState extends State<SystemStatusIndicator> {
-  String status = "checking"; // "operational", "degraded", "checking"
-
+  String status = "checking";
   @override
   void initState() {
     super.initState();
     _pingServer();
   }
-
   void _pingServer() async {
     try {
       final response = await http.get(Uri.parse("${ApiService.baseUrl}/health-check"));
@@ -30,11 +25,9 @@ class _SystemStatusIndicatorState extends State<SystemStatusIndicator> {
       setState(() => status = "degraded");
     }
   }
-
   @override
   Widget build(BuildContext context) {
     Color color = status == "operational" ? const Color(0xFF00FFA3) : Colors.redAccent;
-    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(

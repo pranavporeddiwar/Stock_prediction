@@ -1,77 +1,59 @@
 class CandleModel {
-  final DateTime? time; // ⚡ NEW
+  final DateTime? time;
   final double open;
   final double high;
   final double low;
   final double close;
-  final double? volume; // ⚡ NEW
-  
-  // AI LLM Properties
+  final double? volume;
   final String? pattern;
   final String? risk;
-
   CandleModel({
-    this.time, // ⚡ NEW
+    this.time,
     required this.open,
     required this.high,
     required this.low,
     required this.close,
-    this.volume, // ⚡ NEW
+    this.volume,
     this.pattern,
     this.risk,
   });
-
   factory CandleModel.fromJson(Map<String, dynamic> json) {
-    // ⚡ Bulletproof Number Parser: Handles int, double, or String seamlessly
     double parseDouble(dynamic val, double fallback) {
       if (val == null) return fallback;
       if (val is num) return val.toDouble();
       if (val is String) return double.tryParse(val) ?? fallback;
       return fallback;
     }
-
-    // If OHL are missing (like in raw future predictions), fall back to the Close price
     double closePrice = parseDouble(json['close'], 0.0);
-
     return CandleModel(
       open: parseDouble(json['open'], closePrice),
       high: parseDouble(json['high'], closePrice),
       low: parseDouble(json['low'], closePrice),
       close: closePrice,
-      volume: parseDouble(json['volume'], 0.0), // ⚡ NEW
+      volume: parseDouble(json['volume'], 0.0),
       pattern: json['pattern']?.toString(),
       risk: json['risk']?.toString(),
     );
   }
 }
-
 class StockData {
   final String symbol;
   final double currentPrice;
   final List<CandleModel> history;
   final List<CandleModel> predictedPath;
-  
-  // AI Metrics
   final double sentiment;
   final String suitability;
   final String action;
   final String reasoning;
   final double targetPrice;
   final double stopLoss;
-  
-  // NEW: Buy/Sell Timing
   final String buyTime;
   final String sellTime;
-  
-  // NEW: Trading Style
   final String tradingStyle;
   final String styleReason;
   final String riskLevel;
-  
-  // Technicals
   final double rsi;
   final String trendLogic;
-
   StockData({
     required this.symbol,
     required this.currentPrice,
@@ -91,33 +73,25 @@ class StockData {
     required this.rsi,
     required this.trendLogic,
   });
-
   factory StockData.fromJson(Map<String, dynamic> json) {
-    // Bulletproof Number Parser
     double parseDouble(dynamic val, double fallback) {
       if (val == null) return fallback;
       if (val is num) return val.toDouble();
       if (val is String) return double.tryParse(val) ?? fallback;
       return fallback;
     }
-
     return StockData(
       symbol: json['symbol']?.toString() ?? 'UNKNOWN',
       currentPrice: parseDouble(json['current_price'], 0.0),
-      
-      // Map History Data
       history: (json['history'] as List<dynamic>?)?.map((e) {
         if (e is Map<String, dynamic>) return CandleModel.fromJson(e);
         return CandleModel(open: 0, high: 0, low: 0, close: 0);
       }).toList() ?? [],
-      
-      // Map Predicted AI Path 
       predictedPath: (json['future_path'] as List<dynamic>?)?.map((e) {
         if (e is num) return CandleModel.fromJson({'close': e});
         if (e is Map<String, dynamic>) return CandleModel.fromJson(e);
         return CandleModel(open: 0, high: 0, low: 0, close: 0);
       }).toList() ?? [],
-
       sentiment: parseDouble(json['sentiment'], 0.5),
       suitability: json['suitability']?.toString() ?? 'Neutral',
       action: json['action']?.toString() ?? 'HOLD',

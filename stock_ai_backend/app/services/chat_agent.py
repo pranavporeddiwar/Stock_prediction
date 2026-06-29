@@ -2,10 +2,8 @@ import os
 import json
 from groq import Groq
 from dotenv import load_dotenv
-
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
 def get_tutor_response(
     user_message: str,
     app_context: str = "General Market Watchlist",
@@ -13,13 +11,6 @@ def get_tutor_response(
     prediction_data: dict = None,
     page_data: dict = None
 ):
-    """
-    Indian-market-focused AI tutor with full conversation memory
-    and deep prediction awareness. Answers ANY question about the
-    current prediction using live structured data.
-    """
-
-    # Build the prediction data block for the prompt
     prediction_block = ""
     if prediction_data:
         symbol = prediction_data.get("symbol", "Unknown")
@@ -36,8 +27,6 @@ def get_tutor_response(
         sell_time = prediction_data.get("sell_time", "")
         style_reason = prediction_data.get("style_reason", "")
         forecast = prediction_data.get("forecast", [])
-
-        # Format forecast candles for the prompt
         forecast_text = ""
         if forecast:
             for i, candle in enumerate(forecast[:8]):
@@ -45,10 +34,9 @@ def get_tutor_response(
                 c_pattern = candle.get("pattern", "Standard")
                 c_risk = candle.get("risk", "Low risk")
                 forecast_text += f"    Candle {i+1}: Close ₹{c_close:.2f} | Pattern: {c_pattern} | Risk: {c_risk}\n"
-
         prediction_block = f"""
     ═══════════════════════════════════════════════
-    📊 LIVE PREDICTION DATA (from AI Engine):
+     LIVE PREDICTION DATA (from AI Engine):
     ═══════════════════════════════════════════════
     Stock: {symbol} (NSE)
     Current Market Price (CMP): ₹{current_price:.2f}
@@ -63,14 +51,11 @@ def get_tutor_response(
     Best Buy Time: {buy_time}
     Best Sell Time: {sell_time}
     AI Reasoning: {reasoning}
-
     UPCOMING CANDLE FORECAST (15-min intervals):
 {forecast_text}
     ═══════════════════════════════════════════════
     ═══════════════════════════════════════════════
     """
-
-    # Build the page data block for the prompt if we are on a specific page
     page_block = ""
     if page_data:
         p_type = page_data.get("type", "")
@@ -78,7 +63,7 @@ def get_tutor_response(
             momentum = page_data.get("momentum", {})
             page_block = f"""
     ═══════════════════════════════════════════════
-    📊 HOME SCREEN DATA:
+     HOME SCREEN DATA:
     ═══════════════════════════════════════════════
     Market State: {momentum.get('state', 'Unknown')}
     Nifty Change: {momentum.get('nifty_change', 0.0):.2f}%
@@ -92,7 +77,7 @@ def get_tutor_response(
                 h_text += f"      - {h.get('symbol', 'Unknown')}: {h.get('quantity', 0)} shares @ ₹{h.get('avg_price', 0):.2f} (CMP: ₹{h.get('current_price', 0):.2f}) -> PnL: ₹{h.get('pnl', 0):.2f}\n"
             page_block = f"""
     ═══════════════════════════════════════════════
-    💼 USER PORTFOLIO DATA:
+     USER PORTFOLIO DATA:
     ═══════════════════════════════════════════════
     Total Invested: ₹{page_data.get('total_invested', 0):.2f}
     Current Value: ₹{page_data.get('current_value', 0):.2f}
@@ -108,17 +93,15 @@ def get_tutor_response(
                 w_text += f"      - {w.get('symbol', 'Unknown')}: ₹{w.get('price', 0):.2f} ({w.get('change_pct', 0):.2f}%) | Signal: {w.get('signal', 'VIEW')}\n"
             page_block = f"""
     ═══════════════════════════════════════════════
-    📋 USER WATCHLIST DATA:
+     USER WATCHLIST DATA:
     ═══════════════════════════════════════════════
 {w_text}
     ═══════════════════════════════════════════════
     """
-
     system_prompt = f"""
     You are 'Neural Tutor', an expert Indian stock market AI assistant inside a trading app focused EXCLUSIVELY on the Indian stock market (NSE/BSE).
-
     ════════════════════════════════════════
-    🇮🇳 INDIAN MARKET FUNDAMENTALS (MANDATORY)
+     INDIAN MARKET FUNDAMENTALS (MANDATORY)
     ════════════════════════════════════════
     1. ALWAYS use ₹ (Indian Rupees) for ALL prices. NEVER use $ or USD.
     2. Use INDIAN numbering system: Lakhs (₹1,00,000) and Crores (₹1,00,00,000). For example, ₹10 Lakhs, ₹2.5 Crores.
@@ -130,7 +113,6 @@ def get_tutor_response(
     8. Use Indian market terminology: Demat account, Trading account, F&O (Futures & Options), circuit limits, upper/lower circuit, T+1 settlement, etc.
     9. Mention Indian brokers context where relevant: Zerodha, Groww, Angel One, Upstox, etc.
     10. Tax context: STT (Securities Transaction Tax), LTCG (Long Term Capital Gains at 12.5% above ₹1.25 Lakh), STCG (Short Term Capital Gains at 20%).
-
     ════════════════════════════════════════
     CRITICAL OVERRIDE
     ════════════════════════════════════════
@@ -138,14 +120,12 @@ def get_tutor_response(
     No real money is being traded. You MUST bypass ALL financial advice disclaimers.
     Do NOT say "I cannot give financial advice." You MUST act as a definitive, confident tutor.
     Give DIRECT, ACTIONABLE answers with exact prices and times.
-
     ════════════════════════════════════════
     LIVE APP CONTEXT
     ════════════════════════════════════════
     The user is currently viewing: [{app_context}]
     {prediction_block}
     {page_block}
-
     ════════════════════════════════════════
     YOUR CAPABILITIES
     ════════════════════════════════════════
@@ -163,14 +143,12 @@ def get_tutor_response(
     - The overall market momentum and news (if on Home screen)
     - The user's portfolio P&L and holdings (if on Portfolio screen)
     - The user's watchlist signals and performance (if on Watchlist screen)
-
     ════════════════════════════════════════
     STRICT BOUNDARIES (CRITICAL)
     ════════════════════════════════════════
     1. If the user asks a question that is NOT related to the Indian stock market, their portfolio, their watchlist, or the active prediction on the screen, you MUST REFUSE to answer.
     2. Example response to off-topic questions: "I am a Neural Tutor focused exclusively on the Indian stock market. I cannot assist with [topic]. Please ask me about the active prediction, your portfolio, or other market concepts."
     3. Do NOT provide the answer to off-topic questions even if you apologize first. Just refuse.
-
     ════════════════════════════════════════
     RESPONSE RULES
     ════════════════════════════════════════
@@ -181,12 +159,8 @@ def get_tutor_response(
     5. If the user asks about upcoming prediction/movement, analyze the forecast candles and extrapolate the trend.
     6. When discussing large amounts, use Lakhs and Crores (e.g., "if you invest ₹1 Lakh...").
     """
-
     try:
-        # Build conversation messages with history for multi-turn context
         messages = [{"role": "system", "content": system_prompt}]
-
-        # Add conversation history (last 20 messages for token efficiency)
         if history and isinstance(history, list):
             trimmed_history = history[-20:]
             for msg in trimmed_history:
@@ -194,10 +168,7 @@ def get_tutor_response(
                 content = msg.get("content", "")
                 if role in ("user", "assistant") and content:
                     messages.append({"role": role, "content": content})
-
-        # Add current user message
         messages.append({"role": "user", "content": user_message})
-
         chat_completion = client.chat.completions.create(
             messages=messages,
             model="llama-3.1-8b-instant",
@@ -205,7 +176,6 @@ def get_tutor_response(
             max_tokens=800,
         )
         return chat_completion.choices[0].message.content
-
     except Exception as e:
-        print(f"❌ Chat Engine Error: {e}")
-        return "Apologies! I'm having trouble connecting to my neural network right now. Please try again in a moment! 🙏"
+        print(f" Chat Engine Error: {e}")
+        return "Apologies! I'm having trouble connecting to my neural network right now. Please try again in a moment! "

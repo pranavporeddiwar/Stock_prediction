@@ -1,31 +1,23 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'stock_prediction_screen.dart';
-
 class LiveMonitorPage extends StatefulWidget {
   const LiveMonitorPage({super.key});
-
   @override
   State<LiveMonitorPage> createState() => _LiveMonitorPageState();
 }
-
 class _LiveMonitorPageState extends State<LiveMonitorPage> {
   List<dynamic> stocks = [];
   bool isLoading = true;
-
   @override
   void initState() {
     super.initState();
     _fetchMarketData();
   }
-
-  /// Fetches the trained multi-ticker overview from your backend
   Future<void> _fetchMarketData() async {
     if (!mounted) return;
     setState(() => isLoading = true);
-    
     try {
-      // Calls the method we added to ApiService
       final result = await ApiService().getWatchlistOverview();
       if (mounted) {
         setState(() {
@@ -42,7 +34,6 @@ class _LiveMonitorPageState extends State<LiveMonitorPage> {
       }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,23 +61,17 @@ class _LiveMonitorPageState extends State<LiveMonitorPage> {
                   itemCount: stocks.length,
                   itemBuilder: (context, i) {
                     final s = stocks[i];
-
-                    // --- THE FIX: NULL-SAFE DATA EXTRACTION ---
-                    // This prevents the "receiver can be null" error by providing 
-                    // a fallback (0.0 or "N/A") if the API data is missing.
                     final String symbol = s['symbol']?.toString() ?? "N/A";
                     final double ltp = (s['price'] ?? 0.0).toDouble();
                     final double target = (s['target'] ?? 0.0).toDouble();
                     final String signal = s['signal']?.toString() ?? "NEUTRAL";
                     final String confidence = s['confidence']?.toString() ?? "0%";
                     final bool isBullish = signal == "BUY";
-
                     return _buildLiveStockCard(symbol, ltp, target, signal, confidence, isBullish);
                   },
                 ),
     );
   }
-
   Widget _buildLiveStockCard(String sym, double price, double tar, String sig, String conf, bool isUp) {
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StockPredictionScreen(symbol: sym))),
@@ -127,7 +112,6 @@ class _LiveMonitorPageState extends State<LiveMonitorPage> {
       ),
     );
   }
-
   Widget _buildNoDataState() {
     return Center(
       child: Column(

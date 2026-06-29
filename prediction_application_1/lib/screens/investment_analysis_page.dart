@@ -1,28 +1,23 @@
 import 'package:flutter/material.dart';
 import '../models/stock_data.dart';
-
 class InvestmentAnalysisPage extends StatelessWidget {
   final StockData data;
   final double investmentAmount;
-
   const InvestmentAnalysisPage({
     super.key,
     required this.data,
     required this.investmentAmount,
   });
-
   @override
   Widget build(BuildContext context) {
     double effectivePrice = data.currentPrice > 0 ? data.currentPrice : 1.0;
     int shares = (data.currentPrice > 0 && investmentAmount > 0)
         ? (investmentAmount / effectivePrice).floor()
         : 0;
-
     double totalCost = shares * effectivePrice;
     double stopLossPrice = data.stopLoss;
     double targetPrice = data.targetPrice;
     double totalRisk = shares * (effectivePrice - stopLossPrice).abs();
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -86,7 +81,6 @@ class InvestmentAnalysisPage extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildDataCard(
     String title,
     String value,
@@ -131,7 +125,6 @@ class InvestmentAnalysisPage extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildMiniCard(String title, String value, Color color) {
     return Container(
       padding: const EdgeInsets.all(22),
@@ -164,9 +157,8 @@ class InvestmentAnalysisPage extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildRiskVerdict(double risk) {
-    bool highRisk = risk > (investmentAmount * 0.03); // Flagging if risk > 3%
+    bool highRisk = risk > (investmentAmount * 0.03);
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(

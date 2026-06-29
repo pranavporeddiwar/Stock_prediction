@@ -4,49 +4,36 @@ import 'dart:convert';
 import 'dart:math';
 import '../models/stock_data.dart';
 import '../services/api_service.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SmartStockScreen – The Brains (Automatically fetches data from Python)
-// ─────────────────────────────────────────────────────────────────────────────
 class SmartStockScreen extends StatefulWidget {
   final String symbol;
-  
   const SmartStockScreen({super.key, required this.symbol});
-
   @override
   State<SmartStockScreen> createState() => _SmartStockScreenState();
 }
-
 class _SmartStockScreenState extends State<SmartStockScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
-  
   List<CandleModel> _historyData = [];
   List<CandleModel> _futurePath = [];
   double? _targetPrice;
   double? _stopLoss;
   String? _action;
   String? _reasoning;
-
   @override
   void initState() {
     super.initState();
-    _fetchDataFromPython(); // Automatically triggers when the screen opens!
+    _fetchDataFromPython();
   }
-
   Future<void> _fetchDataFromPython() async {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
-
     try {
       final url = Uri.parse('${ApiService.baseUrl}/predict?symbol=${widget.symbol}');
       final response = await http.get(url);
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
         List<CandleModel> parsedCandles = [];
         for (var item in data['history']) {
            parsedCandles.add(CandleModel(
@@ -58,45 +45,32 @@ class _SmartStockScreenState extends State<SmartStockScreen> {
              volume: item['volume']?.toDouble() ?? 0.0,
            ));
         }
-
-        // Only keep the last 20 candles for clean display
         if (parsedCandles.length > 20) {
           parsedCandles = parsedCandles.sublist(parsedCandles.length - 20);
         }
-
-        // Build future candles, NORMALIZING to continue from the last real price
         List<CandleModel> parsedFuture = [];
         if (data['future_path'] != null && parsedCandles.isNotEmpty) {
           final lastRealClose = parsedCandles.last.close;
-          
-          // Extract raw predicted closes
           List<double> rawCloses = [];
           for (var item in data['future_path']) {
             double val = (item is num) ? item.toDouble() : (item['close'] as num).toDouble();
             rawCloses.add(val);
           }
-
-          // Limit to 8 future candles for clean display
           if (rawCloses.length > 8) {
             rawCloses = rawCloses.sublist(0, 8);
           }
-
           if (rawCloses.isNotEmpty) {
-            // Normalize: translate so first predicted close starts from lastRealClose
             final rawBase = rawCloses.first;
             final offset = lastRealClose - rawBase;
-            
             double prevClose = lastRealClose;
             for (int i = 0; i < rawCloses.length; i++) {
               double normalizedClose = rawCloses[i] + offset;
               double open = prevClose;
               double close = normalizedClose;
               double diff = (close - open).abs();
-              // Create realistic wicks
               double wickSize = diff * 0.3 + (lastRealClose * 0.001);
               double high = max(open, close) + wickSize;
               double low = min(open, close) - wickSize;
-              
               parsedFuture.add(CandleModel(
                 open: open, high: high, low: low, close: close, volume: 0,
                 time: parsedCandles.last.time?.add(Duration(minutes: 15 * (i + 1))),
@@ -105,7 +79,6 @@ class _SmartStockScreenState extends State<SmartStockScreen> {
             }
           }
         }
-
         setState(() {
           _historyData = parsedCandles;
           _futurePath = parsedFuture;
@@ -115,7 +88,6 @@ class _SmartStockScreenState extends State<SmartStockScreen> {
           _reasoning = data['reasoning'];
           _isLoading = false;
         });
-
       } else {
         setState(() {
           _errorMessage = "Python Server Error: ${response.statusCode}\nIs the server running?";
@@ -129,7 +101,6 @@ class _SmartStockScreenState extends State<SmartStockScreen> {
       });
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -140,11 +111,11 @@ class _SmartStockScreenState extends State<SmartStockScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _fetchDataFromPython, // Manual refresh button
+            onPressed: _fetchDataFromPython,
           )
         ],
       ),
-      body: _isLoading 
+      body: _isLoading
         ? const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -193,26 +164,17 @@ class _SmartStockScreenState extends State<SmartStockScreen> {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// StockChart – The Canvas
-// ─────────────────────────────────────────────────────────────────────────────
 class StockChart extends StatelessWidget {
   final List<CandleModel> historyData;
   final List<CandleModel> futureData;
   final double? aiTargetPrice;
-  
-  // Variables for AI Trade Strategy
   final DateTime? suggestedBuyTime;
   final double? suggestedBuyPrice;
   final String? buyReasoning;
-  
   final DateTime? suggestedSellTime;
   final double? suggestedSellPrice;
   final String? sellReasoning;
-  
   final double? stopLoss;
-
   const StockChart({
     super.key,
     required this.historyData,
@@ -226,7 +188,6 @@ class StockChart extends StatelessWidget {
     this.sellReasoning,
     this.stopLoss,
   });
-
   static const _bgColor      = Color(0xFF131722);
   static const _gridColor    = Color(0xFF1E222D);
   static const _bullColor    = Color(0xFF26A69A);
@@ -234,13 +195,11 @@ class StockChart extends StatelessWidget {
   static const _textColor    = Color(0xFF9598A1);
   static const _priceTagColor = Color(0xFF2962FF);
   static const _aiLineColor  = Color(0xFF2962FF);
-
   @override
   Widget build(BuildContext context) {
     if (historyData.isEmpty) {
       return _emptyState();
     }
-
     return Container(
       decoration: BoxDecoration(
         color: _bgColor,
@@ -296,7 +255,6 @@ class StockChart extends StatelessWidget {
       ),
     );
   }
-
   void _showTradeStrategyDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -337,7 +295,6 @@ class StockChart extends StatelessWidget {
       },
     );
   }
-
   void _showReasoningDialog(BuildContext context, String action, String reasoning, Color color) {
     showDialog(
       context: context,
@@ -372,17 +329,14 @@ class StockChart extends StatelessWidget {
       },
     );
   }
-
   Widget _buildTradeRow(BuildContext context, String action, double? price, DateTime? time, Color color, String? reasoning) {
     final hasData = price != null && time != null;
-    
-    String formattedDate = hasData 
-        ? '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')}' 
+    String formattedDate = hasData
+        ? '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')}'
         : '--';
-    String formattedTime = hasData 
-        ? '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}' 
+    String formattedTime = hasData
+        ? '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}'
         : '--';
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -443,13 +397,11 @@ class StockChart extends StatelessWidget {
       ),
     );
   }
-
   Widget _header() {
     final last = historyData.last;
     final isUp = last.close >= last.open;
     final change = last.close - last.open;
     final changePct = (change / last.open * 100);
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
       child: Row(
@@ -479,7 +431,6 @@ class StockChart extends StatelessWidget {
       ),
     );
   }
-
   Widget _ohlcLabel(String label, double value) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -493,7 +444,6 @@ class StockChart extends StatelessWidget {
       ),
     );
   }
-
   Widget _emptyState() {
     return Container(
       height: 300,
@@ -504,7 +454,6 @@ class StockChart extends StatelessWidget {
     );
   }
 }
-
 class CandleChartPainter extends CustomPainter {
   final List<CandleModel> candles;
   final List<CandleModel> futureData;
@@ -513,11 +462,9 @@ class CandleChartPainter extends CustomPainter {
   final double? suggestedSellPrice;
   final double? stopLoss;
   final Color bullColor, bearColor, gridColor, textColor, priceTagColor, aiLineColor;
-
   static const double _priceAxisWidth = 68.0;
   static const double _timeAxisHeight = 22.0;
   static const int _gridLines = 5;
-
   CandleChartPainter({
     required this.candles,
     required this.futureData,
@@ -532,83 +479,58 @@ class CandleChartPainter extends CustomPainter {
     required this.priceTagColor,
     required this.aiLineColor,
   });
-
   @override
   void paint(Canvas canvas, Size size) {
     final chartW = size.width - _priceAxisWidth;
     final candleH = size.height - _timeAxisHeight;
     final candleArea = Rect.fromLTWH(0, 0, chartW, candleH);
-
     final allCandles = [...candles, ...futureData];
     if (allCandles.isEmpty) return;
-
-    // Calculate price range from ALL candles (history + normalized future)
     double minPrice = allCandles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
     double maxPrice = allCandles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
-    
     final priceRange = (maxPrice - minPrice) == 0 ? 1.0 : (maxPrice - minPrice);
     final pad = priceRange * 0.10;
     final pMin = minPrice - pad;
     final pMax = maxPrice + pad;
     final pRange = pMax - pMin;
-
     double priceToY(double price) => candleArea.bottom - ((price - pMin) / pRange) * candleArea.height;
-
     final gridPaint = Paint()..color = gridColor..strokeWidth = 0.5;
     final axisTextStyle = TextStyle(color: textColor, fontSize: 9.5, fontFamily: 'monospace');
-
-    // Draw horizontal grid lines
     for (int i = 0; i <= _gridLines; i++) {
       final y = candleArea.top + (candleArea.height / _gridLines) * i;
       canvas.drawLine(Offset(0, y), Offset(chartW, y), gridPaint);
       final price = pMax - (pRange / _gridLines) * i;
       _drawText(canvas, price.toStringAsFixed(1), Offset(chartW + 4, y - 6), axisTextStyle);
     }
-
     final n = allCandles.length;
     final slotW = chartW / n;
     final bodyW = (slotW * 0.7).clamp(4.0, 16.0);
     final wickW = (bodyW * 0.15).clamp(1.0, 2.5);
     final historyLen = candles.length;
-    
-    // ─── Draw AI separator ───
     if (futureData.isNotEmpty && candles.isNotEmpty) {
        final startAiX = slotW * historyLen;
-       
-       // Subtle shaded background for AI prediction area
        final bgPaint = Paint()..color = aiLineColor.withOpacity(0.04)..style = PaintingStyle.fill;
        canvas.drawRect(Rect.fromLTWH(startAiX, 0, chartW - startAiX, candleH), bgPaint);
-       
-       // Vertical dashed separator
        final dashP = Paint()..color = aiLineColor.withOpacity(0.6)..strokeWidth = 1.2;
        _drawDashedLine(canvas, Offset(startAiX, 0), Offset(startAiX, candleH), dashP);
-       
-       // "AI →" label
        final tagBg = RRect.fromRectAndRadius(
          Rect.fromLTWH(startAiX + 3, 4, 32, 16), const Radius.circular(4));
        canvas.drawRRect(tagBg, Paint()..color = aiLineColor.withOpacity(0.9));
-       _drawText(canvas, "AI →", Offset(startAiX + 6, 6), 
+       _drawText(canvas, "AI →", Offset(startAiX + 6, 6),
          const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold));
     }
-
-    // Track buy/sell positions for indicators
     double? buyIndicatorX, buyIndicatorY;
     double? sellIndicatorX, sellIndicatorY;
     double? lowestFutureClose, highestFutureClose;
-
-    // ─── Draw all candles ───
     for (int i = 0; i < n; i++) {
       final c = allCandles[i];
       final isFuture = i >= historyLen;
       final cx = slotW * i + slotW / 2;
       final isBull = c.close >= c.open;
       final paintColor = isBull ? bullColor : bearColor;
-
       final bodyTop    = priceToY(isBull ? c.close : c.open);
       final bodyBottom = priceToY(isBull ? c.open  : c.close);
       final bodyHeight = (bodyBottom - bodyTop).abs().clamp(1.0, double.infinity);
-
-      // Track lowest/highest future candle for BUY/SELL circle placement
       if (isFuture) {
         if (lowestFutureClose == null || c.close < lowestFutureClose) {
           lowestFutureClose = c.close;
@@ -621,77 +543,54 @@ class CandleChartPainter extends CustomPainter {
           sellIndicatorY = priceToY(c.high);
         }
       }
-
       final candleRect = Rect.fromLTWH(cx - bodyW / 2, bodyTop, bodyW, bodyHeight);
-      
       if (isFuture) {
-        // ─── Dashed/ghost candle for AI predictions ───
         final fillPaint = Paint()..color = paintColor.withOpacity(0.18)..style = PaintingStyle.fill;
         canvas.drawRRect(RRect.fromRectAndRadius(candleRect, const Radius.circular(1)), fillPaint);
-        
         final borderPaint = Paint()..color = paintColor.withOpacity(0.7)..style = PaintingStyle.stroke..strokeWidth = 1.2;
         canvas.drawRRect(RRect.fromRectAndRadius(candleRect, const Radius.circular(1)), borderPaint);
-        
         final wickPaint = Paint()..color = paintColor.withOpacity(0.6)..strokeWidth = 1.0;
         _drawDashedLine(canvas, Offset(cx, priceToY(c.high)), Offset(cx, bodyTop), wickPaint);
         _drawDashedLine(canvas, Offset(cx, bodyBottom), Offset(cx, priceToY(c.low)), wickPaint);
       } else {
-        // ─── Solid candle for historical data ───
         canvas.drawRRect(
           RRect.fromRectAndRadius(candleRect, const Radius.circular(1)),
           Paint()..color = paintColor,
         );
-        
         final wickPaint = Paint()..color = paintColor..strokeWidth = wickW;
         canvas.drawLine(Offset(cx, priceToY(c.high)), Offset(cx, bodyTop), wickPaint);
         canvas.drawLine(Offset(cx, bodyBottom), Offset(cx, priceToY(c.low)), wickPaint);
       }
-
-      // Time axis labels
       if (i % (n ~/ 5).clamp(1, 8) == 0 && c.time != null) {
         final t = c.time!;
         final label = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
         _drawText(canvas, label, Offset(cx - 14, size.height - _timeAxisHeight + 4), axisTextStyle);
       }
     }
-
-    // ─── Current price line + badge ───
     if (candles.isNotEmpty) {
       final lastPrice = candles.last.close;
       final lastY = priceToY(lastPrice);
       final isLastBull = candles.last.close >= candles.last.open;
       final lineColor = isLastBull ? bullColor : bearColor;
-
-      // Dotted line for current price
-      _drawDashedLine(canvas, Offset(0, lastY), Offset(chartW, lastY), 
+      _drawDashedLine(canvas, Offset(0, lastY), Offset(chartW, lastY),
         Paint()..color = lineColor.withOpacity(0.4)..strokeWidth = 0.8);
-
-      // Price badge on right axis
       final badgeRect = RRect.fromRectAndRadius(
         Rect.fromLTWH(chartW + 1, lastY - 9, _priceAxisWidth - 2, 18), const Radius.circular(3));
       canvas.drawRRect(badgeRect, Paint()..color = lineColor);
-      _drawText(canvas, lastPrice.toStringAsFixed(1), Offset(chartW + 5, lastY - 6), 
+      _drawText(canvas, lastPrice.toStringAsFixed(1), Offset(chartW + 5, lastY - 6),
         const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold));
     }
-
-    // ─── BUY indicator ("B" circle + price tag) ───
     if (suggestedBuyPrice != null && buyIndicatorX != null && buyIndicatorY != null) {
-      final buyY = buyIndicatorY! + 16; // Below the lowest future candle
-      
-      // Green circle with "B"
+      final buyY = buyIndicatorY! + 16;
       canvas.drawCircle(Offset(buyIndicatorX!, buyY), 10, Paint()..color = bullColor);
       final bPainter = TextPainter(
         text: const TextSpan(text: "B", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
         textDirection: TextDirection.ltr,
       )..layout();
       bPainter.paint(canvas, Offset(buyIndicatorX! - bPainter.width / 2, buyY - bPainter.height / 2));
-
-      // Dashed line to price tag
       final buyTagY = priceToY(suggestedBuyPrice!);
       _drawDashedLine(canvas, Offset(0, buyTagY), Offset(chartW, buyTagY),
         Paint()..color = bullColor.withOpacity(0.5)..strokeWidth = 1.0);
-
-      // BUY price tag on right axis
       final tagText = "BUY ${suggestedBuyPrice!.toStringAsFixed(1)}";
       final tp = TextPainter(
         text: TextSpan(text: tagText, style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.bold)),
@@ -703,25 +602,17 @@ class CandleChartPainter extends CustomPainter {
       canvas.drawRRect(tagRect, Paint()..color = bullColor);
       tp.paint(canvas, Offset(chartW + 6, buyTagY - tp.height / 2));
     }
-
-    // ─── SELL indicator ("S" circle + price tag) ───
     if (suggestedSellPrice != null && sellIndicatorX != null && sellIndicatorY != null) {
-      final sellY = sellIndicatorY! - 16; // Above the highest future candle
-      
-      // Red circle with "S"
+      final sellY = sellIndicatorY! - 16;
       canvas.drawCircle(Offset(sellIndicatorX!, sellY), 10, Paint()..color = bearColor);
       final sPainter = TextPainter(
         text: const TextSpan(text: "S", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
         textDirection: TextDirection.ltr,
       )..layout();
       sPainter.paint(canvas, Offset(sellIndicatorX! - sPainter.width / 2, sellY - sPainter.height / 2));
-
-      // Dashed line to price tag
       final sellTagY = priceToY(suggestedSellPrice!);
       _drawDashedLine(canvas, Offset(0, sellTagY), Offset(chartW, sellTagY),
         Paint()..color = bearColor.withOpacity(0.5)..strokeWidth = 1.0);
-
-      // SELL price tag on right axis
       final tagText = "SELL ${suggestedSellPrice!.toStringAsFixed(1)}";
       final tp = TextPainter(
         text: TextSpan(text: tagText, style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.bold)),
@@ -733,13 +624,10 @@ class CandleChartPainter extends CustomPainter {
       canvas.drawRRect(tagRect, Paint()..color = bearColor);
       tp.paint(canvas, Offset(chartW + 6, sellTagY - tp.height / 2));
     }
-
-    // ─── Stop Loss dotted line ───
     if (stopLoss != null) {
       final slY = priceToY(stopLoss!);
       _drawDashedLine(canvas, Offset(0, slY), Offset(chartW, slY),
         Paint()..color = const Color(0xFFFF9800).withOpacity(0.5)..strokeWidth = 0.8);
-      
       final slTag = "SL ${stopLoss!.toStringAsFixed(1)}";
       final slPainter = TextPainter(
         text: TextSpan(text: slTag, style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
@@ -752,12 +640,10 @@ class CandleChartPainter extends CustomPainter {
       slPainter.paint(canvas, Offset(chartW + 6, slY - slPainter.height / 2));
     }
   }
-
   void _drawText(Canvas canvas, String text, Offset offset, TextStyle style) {
     final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr)..layout();
     tp.paint(canvas, offset);
   }
-
   void _drawDashedLine(Canvas canvas, Offset p1, Offset p2, Paint paint) {
     const dashLen = 4.0;
     const gapLen  = 3.0;
@@ -768,17 +654,15 @@ class CandleChartPainter extends CustomPainter {
     final steps = (dist / (dashLen + gapLen)).floor();
     final ux = dx / dist;
     final uy = dy / dist;
-
     for (int i = 0; i < steps; i++) {
       final startD = i * (dashLen + gapLen);
       final endD   = startD + dashLen;
       canvas.drawLine(Offset(p1.dx + ux * startD, p1.dy + uy * startD), Offset(p1.dx + ux * endD, p1.dy + uy * endD), paint);
     }
   }
-
   @override
-  bool shouldRepaint(covariant CandleChartPainter old) => 
-      old.candles != candles || 
+  bool shouldRepaint(covariant CandleChartPainter old) =>
+      old.candles != candles ||
       old.futureData != futureData ||
       old.aiTargetPrice != aiTargetPrice ||
       old.suggestedBuyPrice != suggestedBuyPrice ||

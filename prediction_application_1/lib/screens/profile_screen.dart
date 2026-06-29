@@ -2,45 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
-
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
-
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
-
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _auth = AuthService();
   final _formKey = GlobalKey<FormState>();
-
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isEditing = false;
-
-  // Controllers
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _capitalController = TextEditingController();
-
-  // Dropdown values
   String _experience = 'Beginner';
   String _riskAppetite = 'Moderate';
   String _preferredSegment = 'Equity';
   String _tradingStyle = 'Intraday';
-
-  // Options
   static const List<String> _experienceOptions = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
   static const List<String> _riskOptions = ['Conservative', 'Moderate', 'Aggressive'];
   static const List<String> _segmentOptions = ['Equity', 'F&O', 'Commodities', 'Crypto', 'All'];
   static const List<String> _styleOptions = ['Intraday', 'Swing', 'Positional', 'Long-term'];
-
   @override
   void initState() {
     super.initState();
     _loadProfile();
   }
-
   @override
   void dispose() {
     _nameController.dispose();
@@ -48,11 +36,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _capitalController.dispose();
     super.dispose();
   }
-
   Future<void> _loadProfile() async {
     final uid = _auth.currentUserUid;
     if (uid == null) return;
-
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
       if (doc.exists && doc.data() != null) {
@@ -68,24 +54,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       debugPrint("Profile load error: $e");
     }
-
     if (mounted) {
       setState(() {
         _isLoading = false;
-        // If name is empty, auto-enter edit mode so user fills the profile
         if (_nameController.text.isEmpty) _isEditing = true;
       });
     }
   }
-
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
-
     final uid = _auth.currentUserUid;
     if (uid == null) return;
-
     setState(() => _isSaving = true);
-
     try {
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'name': _nameController.text.trim(),
@@ -98,7 +78,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'email': FirebaseAuth.instance.currentUser?.email ?? '',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-
       if (mounted) {
         setState(() {
           _isSaving = false;
@@ -120,12 +99,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
   }
-
   void _showChangePasswordDialog() {
     final currentPassController = TextEditingController();
     final newPassController = TextEditingController();
     final formKey = GlobalKey<FormState>();
-
     showDialog(
       context: context,
       builder: (ctx) {
@@ -201,11 +178,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
   }
-
   void _showDeleteAccountDialog() {
     final passController = TextEditingController();
     final formKey = GlobalKey<FormState>();
-
     showDialog(
       context: context,
       builder: (ctx) {
@@ -252,7 +227,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     await _auth.deleteAccount(passController.text);
                     if (ctx.mounted) {
                       Navigator.pop(ctx);
-                      // User is deleted, auth stream will redirect to login
                     }
                   } catch (e) {
                     if (ctx.mounted) {
@@ -269,7 +243,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
   }
-
   void _confirmSignOut() {
     showDialog(
       context: context,
@@ -294,19 +267,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final email = user?.email ?? '';
-
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Color(0xFF9D4EDD))),
       );
     }
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -337,16 +307,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 8),
               Text(email, style: const TextStyle(color: Colors.white38, fontSize: 12)),
               const SizedBox(height: 30),
-
-              // Section: Personal Info
               _buildSectionLabel("PERSONAL INFORMATION"),
               const SizedBox(height: 12),
               _buildTextField(_nameController, "Full Name", Icons.person_outline, required: true),
               const SizedBox(height: 14),
               _buildTextField(_phoneController, "Phone Number", Icons.phone_outlined, keyboard: TextInputType.phone),
               const SizedBox(height: 28),
-
-              // Section: Trading Profile
               _buildSectionLabel("TRADING PROFILE"),
               const SizedBox(height: 12),
               _buildDropdown("Experience Level", _experience, _experienceOptions, (v) => setState(() => _experience = v!)),
@@ -359,8 +325,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 14),
               _buildTextField(_capitalController, "Daily Capital (₹)", Icons.account_balance_wallet_outlined, keyboard: TextInputType.number),
               const SizedBox(height: 30),
-
-              // Save Button (only in edit mode)
               if (_isEditing) ...[
                 SizedBox(
                   width: double.infinity,
@@ -379,16 +343,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: () {
-                    _loadProfile(); // reload original data
+                    _loadProfile();
                     setState(() => _isEditing = false);
                   },
                   child: const Text("Cancel", style: TextStyle(color: Colors.white38)),
                 ),
               ],
-
               const SizedBox(height: 20),
-
-              // Account Security Section
               _buildSectionLabel("ACCOUNT SECURITY"),
               const SizedBox(height: 12),
               _buildSecurityAction(
@@ -411,21 +372,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: Colors.redAccent,
                 onTap: _showDeleteAccountDialog,
               ),
-              const SizedBox(height: 100), // bottom padding for nav bar
+              const SizedBox(height: 100),
             ],
           ),
         ),
       ),
     );
   }
-
-  // ──────────── UI BUILDING BLOCKS ────────────
-
   Widget _buildAvatar(String email) {
     final initials = _nameController.text.isNotEmpty
         ? _nameController.text.trim().split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join().toUpperCase()
         : email.isNotEmpty ? email[0].toUpperCase() : '?';
-
     return Container(
       width: 80,
       height: 80,
@@ -448,7 +405,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildSectionLabel(String label) {
     return Align(
       alignment: Alignment.centerLeft,
@@ -458,7 +414,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildTextField(
     TextEditingController controller,
     String hint,
@@ -504,7 +459,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildDropdown(String label, String value, List<String> items, ValueChanged<String?> onChanged) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -529,7 +483,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildSecurityAction({
     required String title,
     required IconData icon,

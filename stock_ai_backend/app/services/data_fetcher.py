@@ -7,19 +7,15 @@ import threading
 from dotenv import load_dotenv
 from SmartApi import SmartConnect
 from datetime import datetime, timedelta
-
-# --- ABSOLUTE PATH LOGIC ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "../../"))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
-
 class DataFetcher:
     def __init__(self):
         self.symbols_lut = self._load_csv()
         self._lock = threading.Lock()
         self.api = self._init_session()
         self._last_auth_time = datetime.now() if self.api else None
-
     def _load_csv(self):
         try:
             csv_path = os.path.join(BASE_DIR, "NSE_Symbols.csv")
@@ -31,24 +27,18 @@ class DataFetcher:
         except Exception as e:
             print(f"[ERROR] DataFetcher: CSV Error: {e}")
             return pd.DataFrame()
-
     def _init_session(self):
         try:
             api_key = os.getenv("API_KEY")
             client_id = os.getenv("CLIENT_ID")
             pin = os.getenv("PIN")
             totp_secret = os.getenv("TOTP_SECRET", "").replace(" ", "")
-
             if not all([api_key, client_id, pin, totp_secret]):
                 print("[ERROR] DataFetcher: Missing broker credentials in .env")
                 return None
-
             api = SmartConnect(api_key=api_key)
             totp_code = pyotp.TOTP(totp_secret).now()
-            
-            # Stagger TOTP usage slightly to avoid reusing the exact same token in the same window
             time.sleep(1)
-            
             session = api.generateSession(client_id, pin, totp_code)
             if session and session.get('status'):
                 self._refresh_token_str = session['data']['refreshToken']
@@ -60,13 +50,9 @@ class DataFetcher:
         except Exception as e:
             print(f"[ERROR] DataFetcher: Login Exception: {e}")
             return None
-
     def _refresh_session(self):
-        """Re-authenticate with a fresh token. Thread-safe."""
         with self._lock:
             print("[REFRESH] DataFetcher: Refreshing broker session...")
-            
-            # 1. Try silent refresh using the refresh token
             if getattr(self, '_refresh_token_str', None) and self.api:
                 try:
                     res = self.api.generateToken(self._refresh_token_str)
@@ -77,23 +63,16 @@ class DataFetcher:
                         return True
                 except Exception as e:
                     print(f"[WARN] DataFetcher: Silent refresh failed: {e}")
-
-            # 2. Fallback to full login if silent refresh fails
-            # Wait for the next TOTP window (30s) if we are rapidly failing
             print("[WARN] DataFetcher: Falling back to full TOTP login...")
             time.sleep(2)
             self.api = self._init_session()
             self._last_auth_time = datetime.now() if self.api else None
             return self.api is not None
-
     def _is_session_stale(self):
-        """Angel One sessions expire after ~24 hours. Proactively refresh."""
         if not self._last_auth_time:
             return True
-        return (datetime.now() - self._last_auth_time).total_seconds() > 20 * 3600  # 20 hours
-
+        return (datetime.now() - self._last_auth_time).total_seconds() > 20 * 3600
     def is_session_alive(self):
-        """Actually test the broker connection, not just check if the object exists."""
         if not self.api:
             return False
         try:
@@ -101,62 +80,43 @@ class DataFetcher:
             return profile is not None and profile.get('status', False)
         except Exception:
             return False
-
     def get_enriched_data(self, symbol_input, mode="intraday"):
-        """Fetch candle data with automatic session retry on failure."""
         if self.symbols_lut.empty:
             return None
-
-        # Proactively refresh if session is stale
         if self._is_session_stale() or not self.api:
             self._refresh_session()
-
         if not self.api:
             return None
-
         query = symbol_input.upper().strip()
-        match = self.symbols_lut[(self.symbols_lut['symbol'].str.upper() == query) | 
+        match = self.symbols_lut[(self.symbols_lut['symbol'].str.upper() == query) |
                                  (self.symbols_lut['symbol'].str.upper() == f"{query}-EQ")]
-        
         if match.empty: return None
-            
         token = str(match.iloc[0]['token'])
         trading_symbol = str(match.iloc[0]['symbol'])
         interval = "FIFTEEN_MINUTE" if mode.lower() == "intraday" else "ONE_MINUTE"
-        
-        # Attempt fetch, retry once with fresh session on failure
         for attempt in range(2):
             result = self._fetch_candles(token, trading_symbol, interval)
             if result is not None:
                 return result
-            
-            # First attempt failed — try refreshing the session
             if attempt == 0:
                 print(f"[WARN] DataFetcher: Fetch failed for {query}, refreshing session (attempt {attempt + 1})...")
                 if not self._refresh_session():
                     print("[ERROR] DataFetcher: Session refresh failed. Cannot recover.")
                     return None
-        
         return None
-
     def _fetch_candles(self, token, trading_symbol, interval):
-        """Internal method to fetch and enrich candle data."""
         try:
             now = datetime.now()
             from_time = (now - timedelta(days=20)).strftime('%Y-%m-%d 09:15')
             to_time = now.strftime('%Y-%m-%d %H:%M')
-
             res = self.api.getCandleData({
                 "exchange": "NSE", "symboltoken": token, "interval": interval,
                 "fromdate": from_time, "todate": to_time
             })
-
             if res and res.get('status') and res.get('data'):
                 df = pd.DataFrame(res['data'], columns=['time', 'open', 'high', 'low', 'close', 'volume'])
                 for col in ['open', 'high', 'low', 'close', 'volume']:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
-                
-                # Injection: Live Price Tick
                 try:
                     ltp_res = self.api.ltpData("NSE", trading_symbol, token)
                     if ltp_res and ltp_res.get('status'):
@@ -166,28 +126,23 @@ class DataFetcher:
                         df.at[df.index[-1], 'low'] = min(df.at[df.index[-1], 'low'], live_ltp)
                 except Exception:
                     pass
-
-                # Professional Indicators
                 df['rsi'] = self._calculate_rsi(df['close'])
                 df['atr'] = self._calculate_atr(df)
                 df['ema_20'] = df['close'].ewm(span=20, adjust=False).mean()
                 df['h_o'] = ((df['high'] - df['close']) / (df['close'] + 0.001)) * 100
                 df['pct_chng'] = df['close'].pct_change() * 100
-                
                 enriched = df.dropna().reset_index(drop=True)
                 return enriched if not enriched.empty else None
             return None
         except Exception as e:
             print(f"[ERROR] Fetcher Error: {e}")
             return None
-
     def _calculate_rsi(self, series, period=14):
         delta = series.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
         rs = gain / (loss + 0.00001)
         return 100 - (100 / (1 + rs))
-
     def _calculate_atr(self, df, period=14):
         high_low = df['high'] - df['low']
         high_close = (df['high'] - df['close'].shift()).abs()

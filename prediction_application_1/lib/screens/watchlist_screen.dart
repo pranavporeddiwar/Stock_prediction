@@ -4,15 +4,12 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../services/api_service.dart';
 import 'stock_prediction_screen.dart';
-import 'backtest_screen.dart'; // 🔬 IMPORTED: Link to your Strategy Lab UI
-
-// --- HEARTBEAT WIDGET ---
+import 'backtest_screen.dart';
 class SystemStatusIndicator extends StatefulWidget {
   const SystemStatusIndicator({super.key});
   @override
   State<SystemStatusIndicator> createState() => _SystemStatusIndicatorState();
 }
-
 class _SystemStatusIndicatorState extends State<SystemStatusIndicator> {
   String status = "checking";
   @override
@@ -37,14 +34,11 @@ class _SystemStatusIndicatorState extends State<SystemStatusIndicator> {
     ]);
   }
 }
-
 class WatchlistScreen extends StatefulWidget {
   const WatchlistScreen({super.key});
-
   @override
   State<WatchlistScreen> createState() => _WatchlistScreenState();
 }
-
 class _WatchlistScreenState extends State<WatchlistScreen> {
   List<Map<String, dynamic>> stocks = [];
   List<Map<String, dynamic>> filteredStocks = [];
@@ -53,21 +47,18 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   Timer? _refreshTimer;
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _overlaySearchController = TextEditingController();
-
   late List<dynamic> _preCalculatedSuggestions;
-
   final List<String> _allMarketStocks = [
-    "ADANIENT", "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO", "BAJFINANCE", 
-    "BHARTIARTL", "BPCL", "BRITANNIA", "CIPLA", "COALINDIA", 
-    "DIVISLAB", "DRREDDY", "EICHERMOT", "GRASIM", "HCLTECH", 
-    "HDFC", "HDFCBANK", "HEROMOTOCO", "HINDALCO", "HINDUNILVR", 
-    "ICICIBANK", "INDUSINDBK", "INFY", "ITC", "JSWSTEEL", 
-    "KOTAKBANK", "LT", "M&M", "MARUTI", "NESTLEIND", 
-    "NTPC", "ONGC", "POWERGRID", "RELIANCE", "SBILIFE", 
-    "SBIN", "SUNPHARMA", "TATACONSUM", "TATAMOTORS", "TATASTEEL", 
+    "ADANIENT", "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO", "BAJFINANCE",
+    "BHARTIARTL", "BPCL", "BRITANNIA", "CIPLA", "COALINDIA",
+    "DIVISLAB", "DRREDDY", "EICHERMOT", "GRASIM", "HCLTECH",
+    "HDFC", "HDFCBANK", "HEROMOTOCO", "HINDALCO", "HINDUNILVR",
+    "ICICIBANK", "INDUSINDBK", "INFY", "ITC", "JSWSTEEL",
+    "KOTAKBANK", "LT", "M&M", "MARUTI", "NESTLEIND",
+    "NTPC", "ONGC", "POWERGRID", "RELIANCE", "SBILIFE",
+    "SBIN", "SUNPHARMA", "TATACONSUM", "TATAMOTORS", "TATASTEEL",
     "TCS", "TECHM", "TITAN", "ULTRACEMCO", "UPL", "WIPRO"
   ];
-
   @override
   void initState() {
     super.initState();
@@ -79,7 +70,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       if (!isSearching && mounted) _loadWatchlist(isSilent: true);
     });
   }
-
   @override
   void dispose() {
     _refreshTimer?.cancel();
@@ -87,7 +77,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     _overlaySearchController.dispose();
     super.dispose();
   }
-
   void _onSearchChanged(String query) {
     if (!mounted) return;
     setState(() {
@@ -100,7 +89,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
               .toList();
     });
   }
-
   Future<void> _loadWatchlist({bool isSilent = false}) async {
     if (!mounted || isSearching) return;
     if (!isSilent) setState(() => isLoading = true);
@@ -114,12 +102,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
         });
       }
     } catch (e) {
-      debugPrint("❌ Watchlist Sync Error: $e");
+      debugPrint(" Watchlist Sync Error: $e");
       if (mounted && !isSilent) setState(() => isLoading = false);
     }
   }
-
-  // ⚡ UPDATED COMPREHENSIVE SEARCH & BACKTEST OVERLAY MODAL
   void _showComprehensiveSearch(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -129,7 +115,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
         height: MediaQuery.of(context).size.height * 0.85,
         padding: const EdgeInsets.all(20),
         decoration: const BoxDecoration(
-          color: Color(0xFF0F111A), 
+          color: Color(0xFF0F111A),
           borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
         ),
         child: Column(
@@ -137,18 +123,16 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 20),
-            
-            // Search field triggers prediction view immediately on submit
             TextField(
               controller: _overlaySearchController,
               autofocus: true,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: "Enter stock symbol (e.g., RELIANCE)...", 
+                hintText: "Enter stock symbol (e.g., RELIANCE)...",
                 hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-                prefixIcon: const Icon(Icons.auto_awesome, color: Color(0xFF9D4EDD)), 
-                filled: true, 
-                fillColor: Colors.black, 
+                prefixIcon: const Icon(Icons.auto_awesome, color: Color(0xFF9D4EDD)),
+                filled: true,
+                fillColor: Colors.black,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
               ),
               onSubmitted: (query) {
@@ -159,8 +143,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
               },
             ),
             const SizedBox(height: 25),
-            
-            // Direct Action Trigger Nodes for Search Selection
             Row(
               children: [
                 Expanded(
@@ -197,8 +179,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     onPressed: () {
                       final symbol = _overlaySearchController.text.trim().toUpperCase();
                       if (symbol.isNotEmpty) {
-                        Navigator.pop(context); // Unmount modal overlay safely
-                        // 🔬 Routes user immediately to the Strategy Lab screen node
+                        Navigator.pop(context);
                         Navigator.push(context, MaterialPageRoute(builder: (context) => BacktestScreen(symbol: symbol)));
                       }
                     },
@@ -207,14 +188,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
               ],
             ),
             const SizedBox(height: 35),
-            
             const Text(
-              "QUICK LAB SUGGESTIONS", 
+              "QUICK LAB SUGGESTIONS",
               style: TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.bold)
             ),
             const SizedBox(height: 15),
-            
-            // Interactive Quick Suggestion Row Matrix
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -253,7 +231,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       ),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -265,7 +242,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           children: [
             Text(isSearching ? "MARKET DISCOVERY" : "AI MARKET MONITOR", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
             const Spacer(),
-            if (!isSearching) const SystemStatusIndicator(), 
+            if (!isSearching) const SystemStatusIndicator(),
           ],
         ),
         leading: isSearching ? IconButton(icon: const Icon(Icons.arrow_back, color: Color(0xFF00FFA3), size: 20), onPressed: () => setState(() => isSearching = false)) : null,
@@ -281,21 +258,17 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       ),
     );
   }
-
   Widget _buildWatchlist() => ListView.builder(
     physics: const BouncingScrollPhysics(),
     itemCount: filteredStocks.length,
     itemBuilder: (context, i) => _buildStockCard(filteredStocks[i]),
   );
-
-  // Safe key access helpers
   String _sym(Map<String, dynamic> s)    => (s['symbol'] ?? s['ticker'] ?? '?').toString();
   String _signal(Map<String, dynamic> s) => (s['signal'] ?? s['action'] ?? 'VIEW').toString();
   String _price(Map<String, dynamic> s)  {
     final v = s['price'] ?? s['current_price'] ?? s['ltp'] ?? 0;
     return v is num ? v.toStringAsFixed(2) : v.toString();
   }
-
   Widget _buildSearchBox() => Padding(
     padding: const EdgeInsets.fromLTRB(20, 5, 20, 15),
     child: TextField(
@@ -305,14 +278,12 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       decoration: InputDecoration(hintText: "Search A-Z Tickers...", prefixIcon: const Icon(Icons.search, color: Color(0xFF00FFA3)), filled: true, fillColor: const Color(0xFF111111), border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none)),
     ),
   );
-
   Widget _buildStockCard(Map<String, dynamic> s) {
     final symbol     = _sym(s);
     final signal     = _signal(s);
     final priceLabel = _price(s);
     final isBuy      = signal == 'BUY';
     final isSuggestion = signal == 'VIEW';
-
     return GestureDetector(
       onTap: () => Navigator.push(
         context,

@@ -1,23 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart'; 
-
+import 'package:intl/intl.dart';
 class JournalScreen extends StatelessWidget {
   const JournalScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-
-    // Security Check: Ensure the user is logged in
     if (user == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: Text("Uplink required to view ledger.", style: TextStyle(color: Colors.white54))),
       );
     }
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -25,7 +20,6 @@ class JournalScreen extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text("AI PERFORMANCE JOURNAL", style: TextStyle(color: Colors.white, fontSize: 12, letterSpacing: 1)),
       ),
-      // ⚡ The StreamBuilder actively listens to your cloud database
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
@@ -37,38 +31,30 @@ class JournalScreen extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: Color(0xFF00FFA3)));
           }
-
           if (snapshot.hasError) {
-            return const Center(child: Text("⚠️ Matrix sync error.", style: TextStyle(color: Colors.redAccent)));
+            return const Center(child: Text(" Matrix sync error.", style: TextStyle(color: Colors.redAccent)));
           }
-
           final docs = snapshot.data?.docs ?? [];
-          
-          // 🧠 Translate Firestore documents into your required Map format
           List<Map<String, dynamic>> trades = docs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            
             String dateStr = 'Unknown Date';
             if (data['timestamp'] != null) {
               Timestamp ts = data['timestamp'];
               dateStr = DateFormat('MMM dd, yyyy HH:mm').format(ts.toDate());
             }
-
             return {
               'symbol': data['symbol'] ?? 'UNKNOWN',
-              'isWin': data['isWin'] ?? false, 
+              'isWin': data['isWin'] ?? false,
               'date': dateStr,
             };
           }).toList();
-
           int wins = trades.where((t) => t['isWin'] == true).length;
           double winRate = trades.isEmpty ? 0 : (wins / trades.length) * 100;
-
           return Column(
             children: [
               _buildStatsHeader(trades.length, winRate),
               Expanded(
-                child: trades.isEmpty 
+                child: trades.isEmpty
                   ? const Center(child: Text("No trades logged yet.", style: TextStyle(color: Colors.white24)))
                   : ListView.builder(
                       padding: const EdgeInsets.all(20),
@@ -84,9 +70,6 @@ class JournalScreen extends StatelessWidget {
       ),
     );
   }
-
-  // 👇 Keeping your exact UI layout below 👇
-
   Widget _buildStatsHeader(int totalTrades, double winRate) {
     return Container(
       padding: const EdgeInsets.all(30),
@@ -106,14 +89,12 @@ class JournalScreen extends StatelessWidget {
       ),
     );
   }
-
   Widget _statItem(String l, String v) => Column(
     children: [
       Text(l, style: const TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold)),
       Text(v, style: const TextStyle(color: const Color(0xFF00FFA3), fontSize: 18, fontWeight: FontWeight.bold)),
     ],
   );
-
   Widget _buildTradeTile(Map<String, dynamic> t) {
     bool isWin = t['isWin'];
     return Container(

@@ -1,15 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
-
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  // Listen to whether the user is logged in or out
   Stream<User?> get authStateChanges => _auth.authStateChanges();
-
-  // Get current user
   String? get currentUserUid => _auth.currentUser?.uid;
   User? get currentUser => _auth.currentUser;
-
   Future<User?> signIn(String email, String password) async {
     try {
       UserCredential result = await _auth.signInWithEmailAndPassword(email: email.trim(), password: password.trim());
@@ -18,7 +12,6 @@ class AuthService {
       throw Exception(_friendlyError(e));
     }
   }
-
   Future<User?> signUp(String email, String password) async {
     try {
       UserCredential result = await _auth.createUserWithEmailAndPassword(email: email.trim(), password: password.trim());
@@ -27,7 +20,6 @@ class AuthService {
       throw Exception(_friendlyError(e));
     }
   }
-
   Future<void> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
@@ -35,28 +27,21 @@ class AuthService {
       throw Exception(_friendlyError(e));
     }
   }
-
   Future<void> changePassword(String currentPassword, String newPassword) async {
     try {
       final user = _auth.currentUser;
       if (user == null || user.email == null) throw Exception("No user signed in");
-
-      // Re-authenticate first (Firebase requires this for sensitive operations)
       final cred = EmailAuthProvider.credential(email: user.email!, password: currentPassword);
       await user.reauthenticateWithCredential(cred);
-
-      // Now update
       await user.updatePassword(newPassword);
     } catch (e) {
       throw Exception(_friendlyError(e));
     }
   }
-
   Future<void> deleteAccount(String password) async {
     try {
       final user = _auth.currentUser;
       if (user == null || user.email == null) throw Exception("No user signed in");
-
       final cred = EmailAuthProvider.credential(email: user.email!, password: password);
       await user.reauthenticateWithCredential(cred);
       await user.delete();
@@ -64,12 +49,9 @@ class AuthService {
       throw Exception(_friendlyError(e));
     }
   }
-
   Future<void> signOut() async {
     await _auth.signOut();
   }
-
-  /// Converts Firebase error codes to user-friendly messages
   String _friendlyError(dynamic e) {
     if (e is FirebaseAuthException) {
       switch (e.code) {
