@@ -35,7 +35,7 @@ def get_tutor_response(user_message: str, app_context: str = "General Market Wat
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            model="llama3-8b-8192", # Switched to 8b to avoid rate limit issues with 70b
+            model="llama-3.1-8b-instant", # Switched to an active Groq 8b model
             temperature=0.2, # Low temperature forces it to stick strictly to the numbers
             max_tokens=600,
         )

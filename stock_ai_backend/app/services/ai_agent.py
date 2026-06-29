@@ -111,8 +111,9 @@ def get_hybrid_prediction(stock_symbol, ohlc_data, rsi_value, lstm_predictions):
                     "content": prompt
                 }
             ],
-            model="llama3-8b-8192", 
-            temperature=0.0, 
+            model="llama-3.1-8b-instant", 
+            temperature=0.3, 
+            max_tokens=600,
             response_format={"type": "json_object"}
         )
         
