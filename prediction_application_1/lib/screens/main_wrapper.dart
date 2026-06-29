@@ -24,6 +24,8 @@ class _MainWrapperState extends State<MainWrapper> {
     const ProfileScreen(),          // Index 3 → Profile tab
   ];
 
+  final List<bool> _visitedPages = [true, false, false, false];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -31,7 +33,12 @@ class _MainWrapperState extends State<MainWrapper> {
       extendBody: true, 
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: List.generate(_pages.length, (index) {
+          if (_visitedPages[index]) {
+            return _pages[index];
+          }
+          return const SizedBox.shrink(); // Don't build heavy network pages until visited
+        }),
       ),
 
       floatingActionButton: Container(
@@ -63,6 +70,8 @@ class _MainWrapperState extends State<MainWrapper> {
         onTap: (index) {
           setState(() {
             _currentIndex = index;
+            _visitedPages[index] = true; // Mark as visited so it mounts lazily
+
             // Update the global context for the AI
             if (index == 0) {
               currentBotContext.value = "home";

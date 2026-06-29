@@ -8,30 +8,79 @@ import 'screens/auth_screen.dart'; // 🎛️ Injected Login Portal Terminal
 import 'services/portfolio_service.dart'; // 📈 Injected Live Portfolio Engine
 import 'services/auth_service.dart'; // 🛡️ Injected Reactive Security Brain
 
-void main() async {
-  // 1. Ensures the native Flutter engine framework is initialized before asynchronous bindings
+void main() {
+  // 1. Ensures the native Flutter engine framework is initialized
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 2. Starts up the Firebase project layer natively on your device
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    print("☁️ Firebase Cloud Framework Initialized Safely inside Mobile Core.");
-  } catch (e) {
-    print("⚠️ Firebase Root Init Warning: Check your local google-services configuration. Details: $e");
+  // 2. Render instantly with a boot loader to prevent blank OS screens
+  runApp(const NeurotickBootLoader());
+}
+
+class NeurotickBootLoader extends StatefulWidget {
+  const NeurotickBootLoader({super.key});
+
+  @override
+  State<NeurotickBootLoader> createState() => _NeurotickBootLoaderState();
+}
+
+class _NeurotickBootLoaderState extends State<NeurotickBootLoader> {
+  Future<void>? _initFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initFuture = _initializeCore();
   }
-  
-  // 3. Mount the Global State Providers before booting the UI layer
-  runApp(
-    MultiProvider(
-      providers: [
-        // This spins up the active memory and socket engine the moment the app boots
-        ChangeNotifierProvider(create: (_) => PortfolioService()),
-      ],
-      child: const MyApp(),
-    ),
-  );
+
+  Future<void> _initializeCore() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      print("☁️ Firebase Cloud Framework Initialized Safely inside Mobile Core.");
+    } catch (e) {
+      print("⚠️ Firebase Root Init Warning: Check your local google-services configuration. Details: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: _initFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          // Instant draw Native Splash Equivalent
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              backgroundColor: Colors.black,
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.auto_graph, size: 60, color: Color(0xFF9D4EDD)),
+                    SizedBox(height: 25),
+                    CircularProgressIndicator(color: Color(0xFF00FFA3)),
+                    SizedBox(height: 25),
+                    Text("NEURAL UPLINK...", style: TextStyle(color: Colors.white54, letterSpacing: 2, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        // 3. Mount the Global State Providers before booting the UI layer
+        return MultiProvider(
+          providers: [
+            // This spins up the active memory and socket engine the moment the app boots
+            ChangeNotifierProvider(create: (_) => PortfolioService()),
+          ],
+          child: const MyApp(),
+        );
+      },
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
