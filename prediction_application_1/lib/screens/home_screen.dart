@@ -73,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SliverAppBar(
             backgroundColor: Colors.black,
             floating: true,
-            title: Text("NEURAL STREAM DASHBOARD", style: TextStyle(color: Colors.white, fontSize: 14, letterSpacing: 2, fontWeight: FontWeight.bold)),
+            title: const Text("NEUROTICK TERMINAL", style: TextStyle(color: Colors.white, fontSize: 14, letterSpacing: 2, fontWeight: FontWeight.bold)),
           ),
           
           // 1. Market Momentum — Live Data

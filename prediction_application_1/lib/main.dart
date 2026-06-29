@@ -40,7 +40,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Neural Stream Terminal',
+      title: 'NEUROTICK',
       debugShowCheckedModeBanner: false,
       
       // Applying your customized high-contrast quantitative dark theme
