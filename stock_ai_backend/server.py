@@ -58,10 +58,14 @@ async def lifespan(app: FastAPI):
         'cron', 
         day_of_week='mon-fri', 
         hour=8, 
-        minute=30
+        minute=30,
+        id='premarket_training'
     )
     scheduler.start()
     print("✅ Pre-Market AI Scheduler Online (08:30 AM Mon-Fri)")
+    
+    # Run heavy startup in the background so Render health-checks pass instantly
+    asyncio.create_task(init_services())
     
     yield # Application Context Boundary (API runs here)
     
@@ -85,10 +89,25 @@ app.add_middleware(
 # Connect Datastore Node
 db = init_firebase()
 
-# Services initialization
-data_fetcher = DataFetcher()
-prediction_engine = PredictionService()
-watchlist_manager = WatchlistService(fetcher_instance=data_fetcher)
+# Services initialization will happen in the background
+data_fetcher = None
+prediction_engine = None
+watchlist_manager = None
+news_engine = None
+
+async def init_services():
+    global data_fetcher, prediction_engine, watchlist_manager, news_engine
+    print("⏳ Starting background initialization of neural services...")
+    try:
+        # Load heavy TensorFlow model and broker auth in background threads
+        data_fetcher = await asyncio.to_thread(DataFetcher)
+        prediction_engine = await asyncio.to_thread(PredictionService)
+        watchlist_manager = await asyncio.to_thread(WatchlistService, data_fetcher)
+        from app.services.news_service import NewsService
+        news_engine = await asyncio.to_thread(NewsService)
+        print("✅ Neural Services Online!")
+    except Exception as e:
+        print(f"❌ Background Initialization Error: {e}")
 
 # ==========================================
 # 🩺 CLOUD HEALTH CHECK
@@ -97,6 +116,12 @@ watchlist_manager = WatchlistService(fetcher_instance=data_fetcher)
 @app.head("/")
 @app.get("/health-check")
 async def health_check():
+    if not data_fetcher or not prediction_engine:
+        return {
+            "status": "warming_up",
+            "message": "Neural engines are loading into memory...",
+            "timestamp": datetime.now().isoformat()
+        }
     broker_alive = await asyncio.to_thread(data_fetcher.is_session_alive)
     return {
         "status": "operational" if (broker_alive and prediction_engine.model and db) else "degraded",
@@ -109,6 +134,8 @@ async def health_check():
 # ==========================================
 @app.get("/watchlist")
 async def sync_watchlist():
+    if not watchlist_manager:
+        raise HTTPException(status_code=503, detail="AI engine warming up. Please wait...")
     try:
         # Use the enriched market overview with trading styles and technicals
         data = await watchlist_manager.get_market_overview()
@@ -132,6 +159,9 @@ async def sync_watchlist():
 # ==========================================
 @app.get("/predict")
 async def get_prediction(symbol: str = Query(...)):
+    if not data_fetcher or not prediction_engine:
+        raise HTTPException(status_code=503, detail="AI engine warming up. Please wait...")
+    
     # Check broker connectivity first
     if not data_fetcher.api:
         raise HTTPException(status_code=503, detail="Broker session offline. Reconnecting...")
@@ -183,11 +213,10 @@ async def get_prediction(symbol: str = Query(...)):
 # ==========================================
 # 📰 REAL-TIME NEWS ENDPOINT
 # ==========================================
-from app.services.news_service import NewsService
-news_engine = NewsService()
-
 @app.get("/news")
 async def get_market_news():
+    if not news_engine:
+        return {"news": [], "timestamp": datetime.now().isoformat(), "status": "warming_up"}
     try:
         news_items = await asyncio.to_thread(news_engine.get_market_news)
         return {"news": news_items, "timestamp": datetime.now().isoformat()}
