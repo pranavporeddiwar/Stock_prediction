@@ -274,24 +274,13 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // Logo
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF7B2CBF).withOpacity(0.2),
-                          const Color(0xFF9D4EDD).withOpacity(0.05),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: const Icon(Icons.auto_awesome, color: Color(0xFF9D4EDD), size: 48),
+                  Image.asset(
+                    'assets/images/logo.png',
+                    width: 140,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   const Text(
-                    "NEURAL STREAM",
+                    "NEUROTICK",
                     style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 3),
                   ),
                   const SizedBox(height: 8),
