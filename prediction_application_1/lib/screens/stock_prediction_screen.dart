@@ -45,6 +45,8 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
   StreamSubscription? _streamSubscription;
   late TrackballBehavior _trackballBehavior;
   Timer? _autoRefreshTimer;
+  bool _marketClosed = false;
+  String _nextOpenTime = '';
   final Color bgDark = const Color(0xFF0F1219);
   final Color cardDark = const Color(0xFF161A23);
   final Color neonGreen = const Color(0xFF22D372);
@@ -63,10 +65,31 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
       lineType: TrackballLineType.vertical,
       lineColor: Colors.white24,
     );
-    _startLiveStream();
-    _autoRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      _refreshForecast();
-    });
+    _checkMarketStatus();
+  }
+  void _checkMarketStatus() async {
+    try {
+      final status = await ApiService().getMarketStatus();
+      if (!mounted) return;
+      final isOpen = status['is_open'] == true;
+      setState(() {
+        _marketClosed = !isOpen;
+        _nextOpenTime = status['next_open'] ?? 'Unknown';
+      });
+      if (isOpen) {
+        _startLiveStream();
+        _autoRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+          _refreshForecast();
+        });
+      } else {
+        setState(() { isLoading = false; });
+      }
+    } catch (_) {
+      _startLiveStream();
+      _autoRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+        _refreshForecast();
+      });
+    }
   }
   StockData _normalizeStockData(StockData data) {
     if (data.history.isEmpty || data.predictedPath.isEmpty) return data;
@@ -201,7 +224,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     return minutes < 555 || minutes > 930;
   }
   Widget _buildErrorScreen() {
-    final bool marketClosed = false;
+    final bool marketClosed = _marketClosed;
     final IconData icon;
     final String title;
     final String subtitle;
@@ -209,7 +232,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     if (marketClosed) {
       icon = Icons.nightlight_round;
       title = "MARKET CLOSED";
-      subtitle = "NSE trading hours: Mon–Fri, 9:15 AM – 3:30 PM IST.\nData will refresh when markets reopen.";
+      subtitle = "NSE trading hours: Mon-Fri, 9:15 AM - 3:30 PM IST.\nNext session opens: $_nextOpenTime";
       accentColor = const Color(0xFFFFC107);
     } else if (_errorMessage != null && _errorMessage!.contains("503")) {
       icon = Icons.cloud_off_rounded;
@@ -310,7 +333,7 @@ class _StockPredictionScreenState extends State<StockPredictionScreen> {
     if (isLoading) {
       return Scaffold(backgroundColor: bgDark, body: Center(child: CircularProgressIndicator(color: neonGreen)));
     }
-    if (data == null || data!.history.isEmpty) {
+    if (data == null || data!.history.isEmpty || _marketClosed) {
       return _buildErrorScreen();
     }
     List<ChartNode> historyNodes = [];

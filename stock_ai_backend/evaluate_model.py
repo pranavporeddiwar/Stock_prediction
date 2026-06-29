@@ -53,6 +53,7 @@ if df is not None and len(df) > 120:
     prec = precision_score(actual_directions, predicted_directions, zero_division=0)
     rec = recall_score(actual_directions, predicted_directions, zero_division=0)
     f1 = f1_score(actual_directions, predicted_directions, zero_division=0)
+    tn, fp, fn, tp = confusion_matrix(actual_directions, predicted_directions).ravel()
     print("\n================================================================================")
     print(" NEURAL NETWORK CLASSIFICATION METRICS (DIRECTIONAL FORECASTING)")
     print("================================================================================")

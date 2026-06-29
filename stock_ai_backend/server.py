@@ -3,7 +3,7 @@ import asyncio
 import subprocess
 from fastapi import FastAPI, Query, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+from datetime import datetime, time as dtime, timedelta
 import firebase_admin
 from firebase_admin import credentials, firestore
 from contextlib import asynccontextmanager
@@ -23,12 +23,20 @@ def init_firebase():
         print(f" Firebase Init Error: {e}")
         return None
 def run_daily_ml_training():
-    print(f"[{datetime.now()}]  CRON TRIGGERED: Starting pre-market ML training sequence...")
+    print(f"[{datetime.now()}] CRON: Starting pre-market ML training with live broker data...")
     try:
-        subprocess.Popen(["python", "global_train.py"])
-        print(" Pre-market training initiated. Model will be ready before 9:15 AM.")
+        subprocess.Popen(["python", "train_now.py"])
+        print("Pre-market training initiated via train_now.py. Model will be ready before 9:15 AM.")
     except Exception as e:
-        print(f" Automated Training Failed: {e}")
+        print(f"Automated Training Failed: {e}")
+def is_market_open():
+    ist_tz = timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist_tz)
+    if now_ist.weekday() >= 5:
+        return False
+    market_open = dtime(9, 15)
+    market_close = dtime(15, 30)
+    return market_open <= now_ist.time() <= market_close
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(" Initializing Pre-Market Scheduler (IST Timezone)...")
@@ -39,11 +47,11 @@ async def lifespan(app: FastAPI):
         'cron',
         day_of_week='mon-fri',
         hour=8,
-        minute=30,
+        minute=45,
         id='premarket_training'
     )
     scheduler.start()
-    print(" Pre-Market AI Scheduler Online (08:30 AM Mon-Fri)")
+    print("Pre-Market AI Scheduler Online (08:45 AM Mon-Fri)")
     asyncio.create_task(init_services())
     yield
     scheduler.shutdown()
@@ -87,6 +95,29 @@ async def health_check():
         "status": "operational" if (broker_alive and prediction_engine.model and db) else "degraded",
         "nodes": {"broker": broker_alive, "ai_engine": bool(prediction_engine.model), "cloud_db": bool(db)},
         "timestamp": datetime.now().isoformat()
+    }
+@app.get("/market-status")
+async def market_status():
+    ist_tz = timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist_tz)
+    open_flag = is_market_open()
+    if now_ist.weekday() >= 5:
+        days_until_monday = 7 - now_ist.weekday()
+        next_open = (now_ist + timedelta(days=days_until_monday)).replace(hour=9, minute=15, second=0, microsecond=0)
+    elif now_ist.time() > dtime(15, 30):
+        if now_ist.weekday() == 4:
+            next_open = (now_ist + timedelta(days=3)).replace(hour=9, minute=15, second=0, microsecond=0)
+        else:
+            next_open = (now_ist + timedelta(days=1)).replace(hour=9, minute=15, second=0, microsecond=0)
+    elif now_ist.time() < dtime(9, 15):
+        next_open = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
+    else:
+        next_open = now_ist
+    return {
+        "is_open": open_flag,
+        "current_time_ist": now_ist.strftime("%I:%M %p"),
+        "next_open": next_open.strftime("%A, %I:%M %p") if not open_flag else "Now",
+        "day": now_ist.strftime("%A")
     }
 @app.get("/watchlist")
 async def sync_watchlist():

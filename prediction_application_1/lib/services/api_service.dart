@@ -158,4 +158,19 @@ class ApiService {
       'strategy': 'Loading...',
     };
   }
+  Future<Map<String, dynamic>> getMarketStatus() async {
+    final url = Uri.parse('$baseUrl/market-status');
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (_) {}
+    return {
+      'is_open': false,
+      'current_time_ist': '--:-- --',
+      'next_open': 'Unknown',
+      'day': 'Unknown',
+    };
+  }
 }
