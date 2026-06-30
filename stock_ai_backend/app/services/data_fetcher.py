@@ -109,6 +109,10 @@ class DataFetcher:
             now = datetime.now()
             from_time = (now - timedelta(days=20)).strftime('%Y-%m-%d 09:15')
             to_time = now.strftime('%Y-%m-%d %H:%M')
+            
+            # Add delay to prevent "Access denied because of exceeding access rate" (Rate Limit: 3 requests/sec)
+            time.sleep(0.5) 
+            
             res = self.api.getCandleData({
                 "exchange": "NSE", "symboltoken": token, "interval": interval,
                 "fromdate": from_time, "todate": to_time
